@@ -1256,36 +1256,31 @@ chain:             base mainnet`); chime(); break;
         break; }
 
       case 'connect':{
-        const cb = document.getElementById('connectBtn');
-        if(cb.disabled){ printOut('<span style="color:var(--amber)">already connected: 0x29196c58…D77F</span>'); break; }
-        printOut('<span style="color:var(--fg-dim)">[ .. ] requesting wallet permission</span>');
-        await sleep(700);
-        cb.click();
-        printOut('<span style="color:var(--accent)">[ ok ] wallet connected: 0x29196c58…D77F</span>'); break; }
+        // Real EIP-1193 flow lives in connectWallet() at the bottom of this script.
+        // The button click handler dispatches it; we just trigger that path.
+        if(wallet && wallet.connected){
+          printOut('<span style="color:var(--amber)">already connected: '+shortAddr(wallet.address)+'</span>'); break;
+        }
+        await connectWallet();
+        break; }
 
       case 'mint':{
-        const mb = document.getElementById('mintBtn');
-        if(mb.disabled && mb.textContent.includes('MINTED')){
-          printOut('<span style="color:var(--amber)">you already minted this session.</span>'); break;
-        }
-        if(mb.disabled){
-          printOut('<span style="color:var(--red)">[ err ] wallet not connected. run `connect` first.</span>'); break;
+        if(!wallet || !wallet.connected){
+          printOut('<span style="color:var(--red)">[ err ] wallet not connected. run `connect` first.</span>'); errBeep(); break;
         }
         const n = Math.max(1, Math.min(20, parseInt(args[0])||1));
         const reward = n * 500;
         const fee = (n * 0.20).toFixed(2);
         document.getElementById('qty').value = n;
-        printOut(`<span style="color:var(--fg-dim)">[ .. ] requesting puzzle for <b style="color:var(--cyan)">${n}</b> mint(s) · reward <b style="color:var(--accent)">${reward.toLocaleString()}</b> PRJCT0 · fee <b style="color:var(--amber)">$${fee}</b></span>`);
-        await sleep(500);
-        printOut('<span style="color:var(--fg-dim)">[ .. ] starting GPU keccak256 search · target=0x000007a1…</span>');
-        await sleep(900);
-        printOut(`<span style="color:var(--accent)">[ ok ] nonce found in ${(2+Math.random()*2).toFixed(1)}s</span>`);
-        await sleep(400);
-        printOut('<span style="color:var(--fg-dim)">[ .. ] submitting tx to mempool · gas=21 gwei + $0.20 fee</span>');
-        await sleep(800);
-        printOut(`<span style="color:var(--accent)">[ ok ] tx 0x${hex(12)} included in block #22,481,908</span>`);
-        printOut(`<span style="color:var(--amber)">✓ minted ${reward.toLocaleString()} PRJCT0 (${n} mint × 500) for $${fee}.</span>`);
-        mb.click(); break; }
+        printOut('<span style="color:var(--amber)">browser mint disabled — DIFF=8 (32-bit keccak256) is too slow in JS.</span>');
+        await sleep(120);
+        printOut('<span style="color:var(--fg-dim)">to mint <b style="color:var(--cyan)">'+n+'</b> × 500 PRJCT0 (~$'+fee+' fee), use the CLI miner:</span>');
+        printOut('<span style="color:var(--accent)">  git clone https://github.com/Khimsaja/prjct0-miner</span>');
+        printOut('<span style="color:var(--accent)">  cd prjct0-miner &amp;&amp; pip install -r requirements.txt</span>');
+        printOut('<span style="color:var(--accent)">  ./mine.py --wallet '+shortAddr(wallet.address)+' --qty '+n+'</span>');
+        printOut('<span style="color:var(--fg-dim)">(no GPU? rent one on vast.ai for ~$0.15/hr)</span>');
+        chime();
+        break; }
 
       case 'whitepaper': case 'wp': switchTab('wp'); printOut('<span style="color:var(--fg-dim)">→ whitepaper.txt</span>'); break;
       case 'tokenomics': case 'tok': switchTab('tok'); printOut('<span style="color:var(--fg-dim)">→ tokenomics</span>'); break;
@@ -1579,6 +1574,225 @@ ${bot}
       if(t) t.scrollIntoView({behavior:'smooth',block:'start'});
     }
   });
+
+  /* =========================================================
+     REAL WALLET CONNECT — EIP-1193 (MetaMask, Rabby, OKX, etc.)
+     Display-only: we read account + balance, never sign txs.
+     Mining requires the CLI miner (DIFF=8 too slow in browser).
+     ========================================================= */
+  const BASE_CHAIN_ID_HEX = '0x2105';   // 8453
+  const BASE_PARAMS = {
+    chainId: BASE_CHAIN_ID_HEX,
+    chainName: 'Base',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: ['https://mainnet.base.org'],
+    blockExplorerUrls: ['https://basescan.org']
+  };
+
+  const wallet = {
+    address: null,
+    chainId: null,
+    provider: null,
+    connected: false
+  };
+
+  function shortAddr(a){ return a ? (a.slice(0,6)+'…'+a.slice(-4)) : '0x0000…0000'; }
+
+  function hasInjectedWallet(){ return typeof window !== 'undefined' && !!window.ethereum; }
+
+  // Update the network row chip safely (DOM cell layout in mint panel)
+  function setNetworkChip(html){
+    // The "network" key/value pair is the second .kv row in the right column.
+    // We locate it by finding the .k cell whose text == 'network' and updating its sibling .v.
+    const ks = document.querySelectorAll('#stg-mint .kv .k');
+    for(const k of ks){
+      if(k.textContent.trim().toLowerCase() === 'network'){
+        const v = k.nextElementSibling;
+        if(v && v.classList.contains('v')) v.innerHTML = html;
+        return;
+      }
+    }
+  }
+  function setBalanceChip(html){
+    const ks = document.querySelectorAll('#stg-mint .kv .k');
+    for(const k of ks){
+      if(k.textContent.trim().toLowerCase() === 'your balance'){
+        const v = k.nextElementSibling;
+        if(v && v.classList.contains('v')) v.innerHTML = html;
+        return;
+      }
+    }
+  }
+
+  function setConnectedUI(){
+    const cb = document.getElementById('connectBtn');
+    const mb = document.getElementById('mintBtn');
+    document.getElementById('addr').textContent = shortAddr(wallet.address);
+    if(wallet.connected){
+      cb.textContent = '[ ✓ ' + shortAddr(wallet.address) + ' ]';
+      cb.classList.remove('amber'); cb.classList.add('on');
+      const onBase = (wallet.chainId === BASE_CHAIN_ID_HEX);
+      if(onBase){
+        setNetworkChip('Base / <span class="chip on">connected</span>');
+      } else {
+        setNetworkChip('chain ' + wallet.chainId + ' / <span class="chip warn">wrong network</span>');
+      }
+      // mint button stays disabled — display-only, real mint = CLI miner
+      mb.disabled = true;
+      mb.title = 'Browser mint disabled — DIFF=8 needs the CLI miner. Run: ./mine.py';
+    } else {
+      cb.textContent = '[ CONNECT_WALLET ]';
+      cb.classList.remove('on');
+      setNetworkChip('— /  <span class="chip warn">not connected</span>');
+      setBalanceChip('— (connect wallet)');
+      mb.disabled = true;
+    }
+  }
+
+  async function refreshBalance(){
+    if(!wallet.connected) return;
+    try {
+      const wei = await wallet.provider.request({
+        method: 'eth_getBalance',
+        params: [wallet.address, 'latest']
+      });
+      const eth = Number(BigInt(wei)) / 1e18;
+      setBalanceChip(eth.toFixed(5) + ' ETH <span class="chip">native</span>');
+    } catch(e){
+      setBalanceChip('<span class="chip warn">balance read failed</span>');
+    }
+  }
+
+  async function ensureBaseNetwork(){
+    if(wallet.chainId === BASE_CHAIN_ID_HEX) return true;
+    try {
+      await wallet.provider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: BASE_CHAIN_ID_HEX }]
+      });
+      return true;
+    } catch(err){
+      // 4902 = chain not added; add it then retry
+      if(err && (err.code === 4902 || /unrecognized/i.test(err.message||''))){
+        try {
+          await wallet.provider.request({
+            method: 'wallet_addEthereumChain',
+            params: [BASE_PARAMS]
+          });
+          return true;
+        } catch(_) {}
+      }
+      return false;
+    }
+  }
+
+  async function connectWallet(){
+    if(!hasInjectedWallet()){
+      const help = '<span style="color:var(--red)">[ err ]</span> no injected wallet found.<br>' +
+        '<span style="color:var(--fg-dim)">install one of:</span><br>' +
+        '  · <a href="https://metamask.io" target="_blank" rel="noopener">MetaMask</a><br>' +
+        '  · <a href="https://rabby.io" target="_blank" rel="noopener">Rabby</a><br>' +
+        '  · <a href="https://www.okx.com/web3" target="_blank" rel="noopener">OKX Wallet</a><br>' +
+        '<span style="color:var(--fg-dim)">on mobile, open this site inside the wallet&apos;s built-in browser.</span>';
+      printOut(help); errBeep();
+      return;
+    }
+    wallet.provider = window.ethereum;
+    try {
+      printOut('<span style="color:var(--fg-dim)">[ .. ] requesting wallet permission</span>');
+      const accounts = await wallet.provider.request({ method: 'eth_requestAccounts' });
+      if(!accounts || !accounts.length){
+        printOut('<span style="color:var(--red)">[ err ] no account returned</span>'); errBeep(); return;
+      }
+      wallet.address = accounts[0];
+      wallet.chainId = await wallet.provider.request({ method: 'eth_chainId' });
+      wallet.connected = true;
+      printOut('<span style="color:var(--accent)">[ ok ] wallet connected: '+shortAddr(wallet.address)+'</span>');
+      chime();
+      if(wallet.chainId !== BASE_CHAIN_ID_HEX){
+        printOut('<span style="color:var(--amber)">[ .. ] not on Base, switching network…</span>');
+        const ok = await ensureBaseNetwork();
+        if(!ok){
+          printOut('<span style="color:var(--red)">[ warn ] network switch declined. you are on chain '+wallet.chainId+'</span>');
+        } else {
+          wallet.chainId = await wallet.provider.request({ method: 'eth_chainId' });
+          printOut('<span style="color:var(--accent)">[ ok ] switched to Base mainnet</span>');
+        }
+      }
+      setConnectedUI();
+      await refreshBalance();
+      // listeners (idempotent — only attach once)
+      if(!wallet.provider.__prjct0Listeners){
+        wallet.provider.on('accountsChanged', (accs)=>{
+          if(!accs || !accs.length){ disconnectWallet(); return; }
+          wallet.address = accs[0];
+          setConnectedUI(); refreshBalance();
+          printOut('<span style="color:var(--cyan)">[ ev ] account changed → '+shortAddr(wallet.address)+'</span>');
+        });
+        wallet.provider.on('chainChanged', (cid)=>{
+          wallet.chainId = cid;
+          setConnectedUI(); refreshBalance();
+          printOut('<span style="color:var(--cyan)">[ ev ] chain changed → '+cid+'</span>');
+        });
+        wallet.provider.__prjct0Listeners = true;
+      }
+    } catch(err){
+      const msg = (err && (err.message || err.code)) || 'unknown error';
+      if(err && err.code === 4001){
+        printOut('<span style="color:var(--amber)">[ cancelled ] you rejected the request.</span>');
+      } else {
+        printOut('<span style="color:var(--red)">[ err ] '+String(msg).replace(/</g,'&lt;')+'</span>');
+      }
+      errBeep();
+    }
+  }
+
+  function disconnectWallet(){
+    wallet.address = null; wallet.chainId = null; wallet.connected = false;
+    setConnectedUI();
+    printOut('<span style="color:var(--fg-dim)">[ .. ] wallet disconnected (local only — revoke in wallet UI)</span>');
+  }
+
+  // Wire the [ CONNECT_WALLET ] button
+  document.getElementById('connectBtn').addEventListener('click', ()=>{
+    if(wallet.connected){
+      // confirm-style toggle: clicking when connected = disconnect locally
+      disconnectWallet();
+    } else {
+      connectWallet();
+    }
+  });
+
+  // Wire the disabled mint button to show why
+  document.getElementById('mintBtn').addEventListener('click', (e)=>{
+    e.preventDefault();
+    printOut('<span style="color:var(--amber)">browser mint disabled — DIFF=8 needs a real GPU.</span>\n<span style="color:var(--fg-dim)">use the CLI miner:\n  git clone https://github.com/Khimsaja/prjct0-miner\n  cd prjct0-miner &amp;&amp; ./mine.py --wallet '+shortAddr(wallet.address||'0x…')+'</span>');
+  });
+
+  // Auto-restore: if user previously authorised this site, eth_accounts returns
+  // the address without a popup. We do NOT call eth_requestAccounts on load.
+  (async ()=>{
+    if(!hasInjectedWallet()) return;
+    try {
+      wallet.provider = window.ethereum;
+      const accs = await wallet.provider.request({ method: 'eth_accounts' });
+      if(accs && accs.length){
+        wallet.address = accs[0];
+        wallet.chainId = await wallet.provider.request({ method: 'eth_chainId' });
+        wallet.connected = true;
+        setConnectedUI();
+        refreshBalance();
+      }
+    } catch(_){}
+  })();
+
+  // Override the `connect` shell command so it actually works
+  if(typeof window.__prjct0OverrideConnect === 'undefined'){
+    window.__prjct0OverrideConnect = true;
+    // The shell command dispatch already calls cb.click() in case 'connect',
+    // and cb.click() now invokes connectWallet() — so we're good without
+    // touching the dispatcher. Just expose a hint.
+  }
 
   // GO
   runBoot();
