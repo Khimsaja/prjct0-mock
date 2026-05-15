@@ -543,27 +543,28 @@
   <div class="box stage" id="stg-mint">
     <div class="h">
       ╭─[ 01 :: mint ]──────────────────────────────────────╮
-      <span class="tag">status: <span class="chip on">LIVE</span> <span class="chip">phase 0</span></span>
+      <span class="tag">status: <span class="chip on">LIVE</span> <span class="chip">base</span></span>
     </div>
 
     <div class="grid">
       <div>
         <div class="kv">
           <div class="k">contract</div><div class="v">0xPRJCT0…dEAd</div>
-          <div class="k">chain</div><div class="v">ethereum + base</div>
+          <div class="k">chain</div><div class="v">base mainnet</div>
           <div class="k">total supply</div><div class="v">21,000,000 PRJCT0</div>
-          <div class="k">per mint</div><div class="v hot" id="kvPerMint">500 PRJCT0</div>
-          <div class="k">phase</div><div class="v"><span class="chip on">phase 0</span> halving every 21k mints</div>
-          <div class="k">minted</div><div class="v hot" id="kvMinted">1,247,500</div>
-          <div class="k">fee / mint</div><div class="v warn">$0.20 (~0.00007 ETH)</div>
-          <div class="k">algo</div><div class="v">keccak256 PoW (GPU)</div>
+          <div class="k">per mint</div><div class="v hot" id="kvPerMint">500 PRJCT0 (flat)</div>
+          <div class="k">lp premine</div><div class="v"><span class="chip">5%</span> 1,050,000 PRJCT0</div>
+          <div class="k">public pool</div><div class="v">19,950,000 (95%)</div>
+          <div class="k">minted</div><div class="v hot" id="kvMinted">0</div>
+          <div class="k">fee / mint</div><div class="v warn">$0.20 (0.00007 ETH)</div>
+          <div class="k">algo</div><div class="v">keccak256 PoW (DIFF=8)</div>
           <div class="k">cap / wallet</div><div class="v warn">10,000 PRJCT0 (20 mints)</div>
           <div class="k">your balance</div><div class="v">— (connect wallet)</div>
         </div>
 
         <div style="margin-top:12px">
           <div class="bar" id="supplyBar"></div>
-          <div style="color:var(--fg-dim);font-size:11px;margin-top:4px" id="supplyPct">5.94% minted // 19,752,500 left</div>
+          <div style="color:var(--fg-dim);font-size:11px;margin-top:4px" id="supplyPct">0% minted // 19,950,000 left</div>
         </div>
       </div>
 
@@ -571,7 +572,7 @@
         <div class="kv">
           <div class="k">your wallet</div><div class="v" id="addr">0x0000…0000</div>
           <div class="k">network</div><div class="v">— /  <span class="chip warn">not connected</span></div>
-          <div class="k">est. gas</div><div class="v">~0.00084 ETH</div>
+          <div class="k">est. gas</div><div class="v">~$0.001 (Base)</div>
           <div class="k">slots avail</div><div class="v hot">20 / 20</div>
         </div>
 
@@ -585,7 +586,7 @@
             <button class="btn ghost">[ ABORT ]</button>
           </div>
           <div style="color:var(--fg-dim);font-size:11px;max-width:380px">
-            *each mint costs <b style="color:var(--amber)">$0.20</b> (anti-spam) + gas. yields <b style="color:var(--accent)">500</b> PRJCT0 in phase 0. fee splits: 50% LP / 30% burn / 20% bounty. don&apos;t share private keys with anyone, ever.
+            *each mint costs <b style="color:var(--amber)">$0.20</b> (anti-spam) + gas. yields <b style="color:var(--accent)">500</b> PRJCT0 per mint, no halving. 100% of fee goes to a single transparent recipient — funds the LP autopilot at 25% threshold. don&apos;t share private keys with anyone, ever.
           </div>
         </div>
       </div>
@@ -601,47 +602,62 @@
     </div>
 <pre style="color:var(--fg);white-space:pre-wrap;font-size:12px;line-height:1.55">
 <span style="color:var(--amber)">## ABSTRACT</span>
-PRJCT0 is a fair-launch GPU-mintable PoW memecoin on EVM
-chains. zero presale. zero team allocation. zero VCs.
-<b>21,000,000</b> total supply, halving every 21,000 mints —
-bitcoin-coded scarcity in a memecoin wrapper.
+PRJCT0 is a fair-launch GPU-mintable PoW memecoin on Base.
+zero presale. zero team allocation. zero VCs. supply is
+fixed at <b>21,000,000</b> with a flat <b>500 PRJCT0/mint</b> reward
+across the entire mint phase — no halving, no rounds, no
+bonding curves. you mine until the public pool is empty.
 
 <span style="color:var(--amber)">## WHY</span>
 the mint flow on most "fair launch" tokens is a lie. bots
 sweep, snipers front-run, devs rug. PRJCT0 inverts the
 problem: you can only mint by computing keccak256
-hashes that satisfy difficulty D on your own GPU. no
-batch buying. no bundling. no ape advantage.
+hashes that satisfy difficulty <b>D=8</b> (32-bit work) on your
+own GPU. no batch buying. no bundling. no ape advantage.
 
 <span style="color:var(--amber)">## MECHANISM</span>
-each mint() call requires (msg.sender, nonce) such that
-keccak256(sender || nonce) &lt; target. target adjusts
-every 256 mints to hold ≈90s/block global mint rate.
-fee per mint: <b>$0.20</b> (anti-spam, paid in native gas
-token). split 50% LP / 30% burn / 20% public bounty.
+each mint() call requires a uint256 nonce such that
+keccak256(challenge || msg.sender || nonce) ≤ target
+where target = uint256.max >> 32. the per-wallet binding
+via msg.sender makes the nonce non-MEV-copyable.
+challenge rotates every 256 mints to prevent precompute.
+
+fee per mint: <b>$0.20</b> (anti-spam, paid in native gas).
+100% of the fee is forwarded to a single, public
+recipient address — which doubles as the LP seed wallet
+for the autopilot system below.
+
 contract enforces a <b>10,000 PRJCT0</b> hard cap per wallet
-(= 20 mints in phase 0).
+(= 20 mints). cap is in tokens, not mints. exceeding it
+reverts.
 
-<span style="color:var(--amber)">## SUPPLY &amp; HALVING</span>
-total: <b>21,000,000</b> PRJCT0. minting follows a halving
-schedule, every 21,000 mints supply-per-mint halves:
+<span style="color:var(--amber)">## SUPPLY DISTRIBUTION</span>
+total: <b>21,000,000</b> PRJCT0  (immutable)
+├─ <b> 1,050,000</b>  (5%)   LP premine (paired with ETH at trigger)
+└─ <b>19,950,000</b>  (95%)  public mint via PoW
 
-  phase 0 :  500 PRJCT0/mint  →  10,500,000 minted
-  phase 1 :  250 PRJCT0/mint  →   5,250,000 minted
-  phase 2 :  125 PRJCT0/mint  →   2,625,000 minted
-  phase 3 :   62 PRJCT0/mint  →   1,302,000 minted
-  phase 4 :   31 PRJCT0/mint  →     651,000 minted
-  phase 5+:  ...               →     672,000 minted
-                                ─────────────────
-                          TOTAL ≈ 21,000,000 PRJCT0
+at <b>500 PRJCT0/mint</b> flat, the public pool yields
+exactly <b>39,900</b> mints lifetime. once exhausted, mint()
+reverts <span style="color:var(--red)">PoolExhausted()</span>. no further issuance ever.
 
-when phase ∞ ends, contract self-locks. any later
-"mint" reverts with <span style="color:var(--red)">0x0NULL</span>.
+<span style="color:var(--amber)">## LP AUTOPILOT</span>
+when mint counter reaches <b>9,975</b> (= 25% of public pool),
+the contract emits <span style="color:var(--cyan)">LPThresholdReached()</span>. an off-chain
+bot — running on a publicly-announced VPS — listens for
+the event and executes:
+
+  1. take 50% of accumulated ETH from recipient wallet
+  2. pair with the 1.05M PRJCT0 premine
+  3. seed Uniswap V3 pool on Base (1% fee tier)
+  4. lock the LP NFT for 1 year via UNCX
+
+remaining 50% ETH stays in the recipient wallet as
+public treasury for future bounties / audits / ops.
 
 <span style="color:var(--amber)">## DISCLAIMER</span>
 this is a meme experiment. expect bugs, expect zero
-liquidity, expect to lose. do not buy with money you
-cannot afford to set on fire.
+liquidity until the LP threshold fires, expect to lose.
+do not buy with money you cannot afford to set on fire.
 </pre>
     <div style="margin-top:10px">
       <button class="btn ghost">[ DOWNLOAD .pdf ]</button>
@@ -654,46 +670,51 @@ cannot afford to set on fire.
   <div class="box stage" id="stg-tok">
     <div class="h">
       ╭─[ 03 :: tokenomics ]────────────────────────────────╮
-      <span class="tag">supply 21,000,000 PRJCT0 // halving // hard-capped</span>
+      <span class="tag">supply 21,000,000 // flat 500/mint // hard-capped</span>
     </div>
 <pre style="color:var(--fg);font-size:12px">
 ALLOCATION                              %        AMOUNT
-────────────────────────────────────────────────────
-public mint  (PoW, GPU)                 <span style="color:var(--accent)">100%</span>    21,000,000
+────────────────────────────────────────────────────────
+public mint  (PoW, GPU)                 <span style="color:var(--accent)"> 95%</span>    19,950,000
+LP premine   (paired w/ ETH @ 25%)      <span style="color:var(--cyan)">  5%</span>     1,050,000
 team / dev                              <span style="color:var(--red)">  0%</span>             0
 treasury / kol                          <span style="color:var(--red)">  0%</span>             0
 private sale / vc                       <span style="color:var(--red)">  0%</span>             0
-liquidity bootstrap                     <span style="color:var(--red)">  0%</span>             0
-────────────────────────────────────────────────────
+────────────────────────────────────────────────────────
 TOTAL                                  100%    21,000,000
 
-<span style="color:var(--amber)">HALVING SCHEDULE</span>
+<span style="color:var(--amber)">MINT PARAMETERS</span>
 ─────────────────────────────────────────────────────────
-PHASE   PER_MINT   MINTS    PRJCT0 RELEASED   CUMULATIVE
+  per mint           500 PRJCT0   (FLAT — no halving)
+  total mints        39,900       (= 19.95M ÷ 500)
+  per-wallet cap     10,000       (= 20 mints max)
+  difficulty         8 hex zeros  (32-bit keccak256)
+  fee / mint         $0.20        (~0.00007 ETH on Base)
 ─────────────────────────────────────────────────────────
-  0      500       21,000    10,500,000        50.00%
-  1      250       21,000     5,250,000        75.00%
-  2      125       21,000     2,625,000        87.50%
-  3       62       21,000     1,302,000        93.70%
-  4       31       21,000       651,000        96.80%
-  5+     ...        ...        672,000        100.0%
+  lifetime fee raised:  ~$7,980  (39,900 × $0.20)
+
+<span style="color:var(--amber)">LP AUTOPILOT TRIGGER</span>
+─────────────────────────────────────────────────────────
+  threshold     mint #9,975    (25% of public pool)
+  trigger       contract emits LPThresholdReached()
+  bot action    50% of accumulated ETH + 1.05M premine
+                → seed Uniswap V3 pool (1% fee tier)
+                → lock LP NFT 1 year via UNCX
+
+  treasury      remaining 50% ETH stays in recipient
+                wallet (public, no admin keys)
 ─────────────────────────────────────────────────────────
 
-<span style="color:var(--amber)">FEE STRUCTURE</span>  $0.20 per mint  (anti-spam + LP seed)
+<span style="color:var(--amber)">PER-WALLET CAP</span>  10,000 PRJCT0  (= 20 mints, flat)
 ─────────────────────────────────────────────────────────
-  50%  →  liquidity pool  (locked 1 year)
-  30%  →  buyback &amp; burn  (deflation)
-  20%  →  public bounty   (top miners, audit)
-─────────────────────────────────────────────────────────
-  lifetime raise: ~8,400 USD  (42,000 mints × $0.20)
+  enforced on-chain. exceeding = revert WalletCapReached.
+  cap is in tokens, not mints. fan out across wallets to
+  acquire more — same as bitcoin solo mining.
 
-<span style="color:var(--amber)">PER-WALLET CAP</span>  10,000 PRJCT0  (= 20 mints in phase 0)
-─────────────────────────────────────────────────────────
-  enforced on-chain. cannot exceed regardless of phase.
-  cap is in tokens, not mints — phases ≥1 = more mints.
-
-<span style="color:var(--fg-dim)">// liquidity is whatever the community provides post-mint.
-// developers do NOT hold a wallet. contract is renounced at deploy.</span>
+<span style="color:var(--fg-dim)">// LP autopilot is run by the public recipient wallet
+// owner. all events are on-chain; bot source is open.
+// after the trigger fires, the wallet's only role is
+// signing pool-management transactions.</span>
 </pre>
   </div>
 
@@ -705,13 +726,20 @@ PHASE   PER_MINT   MINTS    PRJCT0 RELEASED   CUMULATIVE
       <span class="tag">last commit: 14 May 2026 22:30</span>
     </div>
 <pre style="color:var(--fg);font-size:12px;line-height:1.55">
-[<span style="color:var(--accent)">DONE</span>]   phase -1   shitpost the idea on tg
-[<span style="color:var(--accent)">DONE</span>]   phase  0   contract deploy + mint open  ← <span class="blink" style="color:var(--accent)">●</span> we are here
-[<span style="color:var(--amber)">WIP </span>]   phase  1   community LP on uniswap v3
-[ <span style="color:var(--fg-dim)">..</span> ]   phase  2   bridge to base via canonical
-[ <span style="color:var(--fg-dim)">..</span> ]   phase  3   on-chain leaderboard of top miners
-[ <span style="color:var(--fg-dim)">..</span> ]   phase  4   nfts for top-100 miners (free, opt-in)
-[ <span style="color:var(--fg-dim)">..</span> ]   phase  ∞   abandonment. token survives or it dies.
+[<span style="color:var(--accent)">DONE</span>]   stage -1   shitpost the idea, write the SOL
+[<span style="color:var(--accent)">DONE</span>]   stage  0   contract written + 13/13 tests pass
+[<span style="color:var(--amber)">WIP </span>]   stage  1   deploy to Base mainnet  ← <span class="blink" style="color:var(--accent)">●</span> we are here
+[ <span style="color:var(--fg-dim)">..</span> ]   stage  2   open source CLI miner (python+OpenCL)
+[ <span style="color:var(--fg-dim)">..</span> ]   stage  3   public mint open  /  miners onboard
+[ <span style="color:var(--fg-dim)">..</span> ]   stage  4   LP autopilot fires at 25% (mint #9,975)
+[ <span style="color:var(--fg-dim)">..</span> ]   stage  5   Uniswap V3 pool live  /  LP NFT locked
+[ <span style="color:var(--fg-dim)">..</span> ]   stage  6   on-chain leaderboard of top miners
+[ <span style="color:var(--fg-dim)">..</span> ]   stage  ∞   public mint exhausts at 39,900 mints
+                       contract enforces no further issuance.
+                       protocol is feature-complete forever.
+
+<span style="color:var(--fg-dim)">// no team token unlocks. no governance. no v2.
+// the protocol either survives in the wild, or it dies.</span>
 </pre>
   </div>
 
@@ -734,18 +762,40 @@ PHASE   PER_MINT   MINTS    PRJCT0 RELEASED   CUMULATIVE
     </div>
 <pre style="color:var(--fg);font-size:12px;line-height:1.55">
 <span style="color:var(--amber)">Q.</span> is this a rug?
-<span style="color:var(--accent)">A.</span> contract is renounced. there is no team wallet. but
-   you can absolutely lose money — that&apos;s on you.
+<span style="color:var(--accent)">A.</span> contract has no admin keys after renounce(). fee
+   recipient is a single public address, also the LP
+   seed wallet. all events on-chain. but you can
+   absolutely lose money — that&apos;s on you.
 
 <span style="color:var(--amber)">Q.</span> i don&apos;t have a gpu, can i still mint?
-<span style="color:var(--accent)">A.</span> yes. cpu fallback works at ~1/200 the speed of a
-   mid-range gpu. expect to wait. or rent a gpu on vast.
+<span style="color:var(--accent)">A.</span> technically yes — keccak256 DIFF=8 is solvable on
+   CPU at ~5MH/s, so ~14 minutes per solve. mid-range
+   GPU does it in ~2 seconds. or rent a vast.ai box
+   for $0.15/hr.
 
-<span style="color:var(--amber)">Q.</span> why 1,000,000 supply?
-<span style="color:var(--accent)">A.</span> because it&apos;s a vibe. don&apos;t overthink memecoins.
+<span style="color:var(--amber)">Q.</span> why 21,000,000 supply?
+<span style="color:var(--accent)">A.</span> bitcoin-coded vibe. 95% public mintable, 5% LP
+   premine, no halving. that&apos;s the whole tokenomics.
+
+<span style="color:var(--amber)">Q.</span> when can i trade it?
+<span style="color:var(--accent)">A.</span> after mint #9,975 (25% threshold). LP autopilot bot
+   fires automatically: 1.05M PRJCT0 + 50% of fees go
+   into a Uniswap V3 pool on Base, locked 1 year.
+
+<span style="color:var(--amber)">Q.</span> who runs the LP autopilot bot?
+<span style="color:var(--accent)">A.</span> source is open. wallet is public. lock proof on UNCX
+   is publicly verifiable. it&apos;s a normal off-chain
+   relayer, not a trust-me-bro promise.
+
+<span style="color:var(--amber)">Q.</span> can the dev block me from minting?
+<span style="color:var(--accent)">A.</span> no. only owner power pre-launch is setting the fee
+   recipient address; after first mint that&apos;s frozen.
+   renounce() permanently removes the owner role.
 
 <span style="color:var(--amber)">Q.</span> when chart, when pump?
-<span style="color:var(--accent)">A.</span> never. this is a participation trophy. enjoy mining.
+<span style="color:var(--accent)">A.</span> pool exists at 25%. price discovery is whatever
+   you and the other miners agree it is. no roadmap
+   beyond &quot;mint until exhausted&quot;.
 </pre>
   </div>
 
@@ -802,9 +852,11 @@ PHASE   PER_MINT   MINTS    PRJCT0 RELEASED   CUMULATIVE
 
   /* =========================================================
      SOUND ENGINE — keystroke + chime via WebAudio
+     default ON, clicky mechanical-keyboard vibe
      ========================================================= */
   let audioCtx = null;
-  let soundOn = (localStorage.getItem('prjct0_sound') === '1');
+  // default ON unless user explicitly muted ('0')
+  let soundOn = (localStorage.getItem('prjct0_sound') !== '0');
   function ac(){ if(!audioCtx){ try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)() }catch(e){} } return audioCtx }
   function beep(freq=720, dur=0.04, type='square', vol=0.04){
     if(!soundOn) return;
@@ -816,12 +868,27 @@ PHASE   PER_MINT   MINTS    PRJCT0 RELEASED   CUMULATIVE
     o.connect(g); g.connect(ctx.destination);
     o.start(); o.stop(ctx.currentTime + dur);
   }
-  function chime(){ if(!soundOn) return; [880,1320,1760].forEach((f,i)=>setTimeout(()=>beep(f,0.08,'sine',0.06), i*70)); }
-  function errBeep(){ if(!soundOn) return; beep(180,0.18,'sawtooth',0.06) }
+  function chime(){ if(!soundOn) return; [880,1320,1760].forEach((f,i)=>setTimeout(()=>beep(f,0.08,'sine',0.10), i*70)); }
+  function errBeep(){ if(!soundOn) return; beep(180,0.18,'sawtooth',0.10) }
   function key(){
     if(!soundOn) return;
-    const f = 600 + Math.random()*220;
-    beep(f, 0.018, 'square', 0.025);
+    const ctx = ac(); if(!ctx) return;
+    // Mechanical-keyboard click: short noise burst + thock
+    // 1) sharp attack click (800-1100 Hz square, very short)
+    const f = 850 + Math.random()*250;
+    const o1 = ctx.createOscillator(); const g1 = ctx.createGain();
+    o1.type = 'square'; o1.frequency.value = f;
+    g1.gain.value = 0.10;
+    g1.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.022);
+    o1.connect(g1); g1.connect(ctx.destination);
+    o1.start(); o1.stop(ctx.currentTime + 0.022);
+    // 2) low thock body (180-220 Hz sine, short decay)
+    const o2 = ctx.createOscillator(); const g2 = ctx.createGain();
+    o2.type = 'sine'; o2.frequency.value = 180 + Math.random()*40;
+    g2.gain.value = 0.08;
+    g2.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.045);
+    o2.connect(g2); g2.connect(ctx.destination);
+    o2.start(); o2.stop(ctx.currentTime + 0.045);
   }
 
   function setSoundUI(){
@@ -837,6 +904,19 @@ PHASE   PER_MINT   MINTS    PRJCT0 RELEASED   CUMULATIVE
     if(soundOn) chime();
   });
   setSoundUI();
+
+  // autoplay policy fix: AudioContext starts SUSPENDED until first user gesture.
+  // Force-resume on the first click/keydown anywhere on the page so sound is
+  // immediate as soon as the user starts interacting (the boot typewriter is
+  // still silent, but the moment the user types login or anything → sound).
+  function unlockAudio(){
+    const ctx = ac();
+    if(ctx && ctx.state === 'suspended'){ ctx.resume().catch(()=>{}); }
+    if(soundOn){ key(); }   // a single confirmation tick
+  }
+  window.addEventListener('pointerdown', unlockAudio, {once:true, passive:true});
+  window.addEventListener('keydown',     unlockAudio, {once:true, passive:true});
+  window.addEventListener('touchstart',  unlockAudio, {once:true, passive:true});
 
   /* =========================================================
      THEME — green (default) / amber / cyan / magenta
@@ -856,13 +936,13 @@ PHASE   PER_MINT   MINTS    PRJCT0 RELEASED   CUMULATIVE
     {raw:'<span style="color:var(--fg-dim)">last login: '+(localStorage.getItem('prjct0_last')||'never')+' on tty/0</span>', wait:200},
     {raw:'<span style="color:var(--fg-dim)">welcome back, anon. initializing PRJCT0 client...</span>', wait:200},
     {raw:'', wait:60},
-    {cmd:'./initiate --network mainnet --chain eth,base', wait:280},
+    {cmd:'./initiate --network base --mainnet', wait:280},
     {log:'[ <span style="color:var(--fg-bright)">..</span> ] loading PRJCT0 manifest', resolve:' [ <span style="color:var(--accent)">OK</span> ]', wait:340},
-    {log:'[ <span style="color:var(--fg-bright)">..</span> ] resolving rpc endpoints', resolve:' [ <span style="color:var(--accent)">eth · base</span> ]', wait:360},
+    {log:'[ <span style="color:var(--fg-bright)">..</span> ] resolving rpc endpoint', resolve:' [ <span style="color:var(--accent)">base mainnet</span> ]', wait:360},
     {log:'[ <span style="color:var(--fg-bright)">..</span> ] fetching contract <span style="color:var(--cyan)">0xPRJCT0…dEAd</span>', resolve:' [ <span style="color:var(--accent)">OK</span> ]', wait:340},
     {log:'[ <span style="color:var(--fg-bright)">..</span> ] syncing block height', resolve:' [ <span style="color:var(--accent)">22,481,907</span> ]', wait:340},
-    {log:'[ <span style="color:var(--fg-bright)">..</span> ] reading mint state', resolve:' [ <span style="color:var(--accent)">1,247,500 / 21,000,000</span> ]', wait:340},
-    {log:'[ <span style="color:var(--fg-bright)">..</span> ] current phase / reward', resolve:' [ <span style="color:var(--accent)">phase 0 · 500 PRJCT0/mint</span> ]', wait:340},
+    {log:'[ <span style="color:var(--fg-bright)">..</span> ] reading mint state', resolve:' [ <span style="color:var(--accent)">0 / 19,950,000</span> ]', wait:340},
+    {log:'[ <span style="color:var(--fg-bright)">..</span> ] flat reward / pool', resolve:' [ <span style="color:var(--accent)">500 PRJCT0/mint · 95% public</span> ]', wait:340},
     {raw:'', wait:40},
     {raw:'<span style="color:var(--amber)">[ system ready ]</span> type <span style="color:var(--accent)">help</span> or scroll to begin.', wait:240},
   ];
@@ -1120,7 +1200,7 @@ PHASE   PER_MINT   MINTS    PRJCT0 RELEASED   CUMULATIVE
   <span style="color:var(--accent)">connect</span>       — connect wallet
   <span style="color:var(--accent)">mint [n]</span>      — mint n times (1..20, 500 PRJCT0 each, $0.20/mint)
   <span style="color:var(--accent)">status</span>        — show network + wallet status
-  <span style="color:var(--accent)">supply</span>        — show mint progress + halving
+  <span style="color:var(--accent)">supply</span>        — show mint progress + LP autopilot status
   <span style="color:var(--accent)">contract</span>      — print contract address
   <span style="color:var(--accent)">whitepaper</span>    — open whitepaper section
   <span style="color:var(--accent)">tokenomics</span>    — open tokenomics section
@@ -1153,23 +1233,26 @@ zero presale · zero team · zero VC · zero IQ required.
 type <span style="color:var(--accent)">help</span> for more.`); break;
 
       case 'contract':
-        printOut('<span style="color:var(--cyan)">eth :</span>  0xPRJCT00000000000000000000000000000000dEAd\n<span style="color:var(--cyan)">base:</span>  0xPRJCT00000000000000000000000000000000dEAd'); break;
+        printOut('<span style="color:var(--cyan)">base:</span>  0xPRJCT00000000000000000000000000000000dEAd <span style="color:var(--fg-dim)">// not yet deployed</span>'); break;
 
       case 'supply':
-        printOut(`minted: <span style="color:var(--accent)">1,247,500</span> / 21,000,000 PRJCT0  (5.94%)
-remaining: <span style="color:var(--cyan)">19,752,500</span>
-phase: <span style="color:var(--amber)">0</span>  ·  reward: <span style="color:var(--accent)">500 PRJCT0/mint</span>
-mints this phase: <span style="color:var(--cyan)">2,495 / 21,000</span>  (next halving in 18,505)
-active miners: <span style="color:var(--amber)">128</span>  global H/s: <span style="color:var(--amber)">7.42 GH/s</span>`); break;
+        printOut(`minted: <span style="color:var(--accent)">0</span> / 19,950,000 PRJCT0 (public pool, 95%)
+LP premine (held): <span style="color:var(--cyan)">1,050,000 PRJCT0</span>  (5%)
+total supply now:  <span style="color:var(--accent)">1,050,000 / 21,000,000</span>
+mints lifetime:    <span style="color:var(--cyan)">0 / 39,900</span>
+reward / mint:     <span style="color:var(--accent)">500 PRJCT0 (FLAT — no halving)</span>
+LP autopilot:      armed @ mint #9,975 (25%)
+fee / mint:        <span style="color:var(--amber)">$0.20</span>  (~0.00007 ETH on Base)
+chain:             base mainnet`); chime(); break;
 
       case 'status':{
         const connected = !document.getElementById('connectBtn').disabled === false;
         const w = document.getElementById('addr').textContent;
-        printOut(`<span style="color:var(--fg-dim)">network</span>     ethereum + base
+        printOut(`<span style="color:var(--fg-dim)">network</span>     base mainnet (chain 8453)
 <span style="color:var(--fg-dim)">block</span>       #22,481,907
 <span style="color:var(--fg-dim)">wallet</span>      ${w}
-<span style="color:var(--fg-dim)">slots</span>       25 / 25 available
-<span style="color:var(--fg-dim)">gas est.</span>    ~0.00084 ETH`);
+<span style="color:var(--fg-dim)">slots</span>       20 / 20 available
+<span style="color:var(--fg-dim)">gas est.</span>    ~$0.001 (Base)`);
         break; }
 
       case 'connect':{
@@ -1412,7 +1495,7 @@ ${bot}
       + '<span class="empty">'+'░'.repeat(empty)+'</span>'
       + '] ' + pct.toFixed(2) + '%';
   };
-  draw(5.94);
+  draw(0);
 
   // live feed
   const log = document.getElementById('log');
