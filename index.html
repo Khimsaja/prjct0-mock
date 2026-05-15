@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>PRJCT0 :: PROJECT ZERO ~ ssh mint terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e0a;
+    --bg-deep:#050805;
+    --fg:#9ef58c;
+    --fg-dim:#5a8a52;
+    --fg-bright:#c8ffb8;
+    --accent:#39ff14;
+    --amber:#ffb000;
+    --red:#ff5577;
+    --cyan:#5ce8ff;
+    --line:#1a2a18;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{color:var(--fg);font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;font-size:13px;line-height:1.5}
+  html,body{min-height:100vh}
+  body{
+    background:
+      radial-gradient(circle at 20% 10%, rgba(57,255,20,.04), transparent 40%),
+      radial-gradient(circle at 80% 90%, rgba(92,232,255,.03), transparent 45%),
+      repeating-linear-gradient(45deg, #060808 0 22px, #080a08 22px 44px),
+      #060808;
+    position:relative;
+    padding:28px 24px 60px;
+  }
+  /* desktop "wallpaper" subtle dot grid */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:radial-gradient(rgba(57,255,20,.05) 1px, transparent 1px);
+    background-size:22px 22px;
+  }
+
+  /* the SSH window frame */
+  .window{
+    position:relative;z-index:1;
+    max-width:1180px;margin:0 auto;
+    background:#080c08;
+    border:1px solid #1f2a1d;
+    border-radius:10px;
+    box-shadow:
+      0 0 0 1px rgba(57,255,20,.08),
+      0 30px 80px rgba(0,0,0,.7),
+      0 0 80px rgba(57,255,20,.05);
+    overflow:hidden;
+  }
+  .titlebar{
+    display:flex;align-items:center;gap:10px;
+    background:linear-gradient(180deg,#11181023 0%,#0a0e0a 100%),#0d120c;
+    border-bottom:1px solid #1a2418;
+    padding:9px 14px;
+    user-select:none;
+  }
+  .traffic{display:flex;gap:7px}
+  .traffic span{
+    width:12px;height:12px;border-radius:50%;
+    box-shadow:inset 0 0 2px rgba(0,0,0,.4);
+  }
+  .traffic .r{background:#ff5f57;border:1px solid #c0382e}
+  .traffic .y{background:#febc2e;border:1px solid #c08a1e}
+  .traffic .g{background:#28c840;border:1px solid #1ea033}
+  .titlebar .title{
+    flex:1;text-align:center;color:var(--fg-dim);
+    font-size:12px;letter-spacing:.5px;
+  }
+  .titlebar .title b{color:var(--fg-bright);font-weight:500}
+  .titlebar .icons{color:var(--fg-dim);font-size:11px;letter-spacing:1px}
+
+  /* tab bar (looks like terminal tabs) */
+  .tabs{
+    display:flex;align-items:stretch;
+    background:#070a07;
+    border-bottom:1px solid #1a2418;
+    font-size:11px;
+    overflow-x:auto;
+  }
+  .tab{
+    padding:7px 14px;color:var(--fg-dim);
+    border-right:1px solid #14201310;
+    white-space:nowrap;display:flex;align-items:center;gap:8px;
+    cursor:pointer; user-select:none;
+    transition: background .15s ease, color .15s ease;
+  }
+  .tab[data-target]:hover{background:#0a0e0a;color:var(--fg-bright)}
+  .tab .x{color:#3a4a36;font-size:10px;cursor:pointer}
+  .tab .x:hover{color:var(--red)}
+  .tab.active{
+    background:#0a0e0a;color:var(--fg-bright);
+    border-bottom:1px solid var(--accent);
+    box-shadow:inset 0 -1px 0 var(--accent);
+  }
+  .tab.new{color:var(--fg-dim);padding:7px 12px}
+  .tab.new:hover{color:var(--accent)}
+
+  /* CRT screen surface — only inside the window */
+  .screen{
+    position:relative;
+    background:
+      radial-gradient(ellipse at center, #0c130c 0%, #060906 90%),
+      #050805;
+    padding:22px 26px 60px;
+    text-shadow: 0 0 2px rgba(158,245,140,.55), 0 0 8px rgba(57,255,20,.18);
+  }
+  .screen::before{
+    content:"";position:absolute;inset:0;pointer-events:none;z-index:50;
+    background:repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.22) 3px,
+      rgba(0,0,0,0) 4px
+    );
+    mix-blend-mode:multiply;
+  }
+  .screen::after{
+    content:"";position:absolute;inset:0;pointer-events:none;z-index:49;
+    background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.6) 100%);
+    animation:flicker 5s infinite;
+  }
+  @keyframes flicker{
+    0%,100%{opacity:1}
+    47%{opacity:1}
+    48%{opacity:.85}
+    49%{opacity:1}
+    72%{opacity:.92}
+    73%{opacity:1}
+  }
+
+  /* bottom shell prompt bar (always on screen) */
+  .shellbar{
+    position:absolute;left:0;right:0;bottom:0;
+    background:#0a0f09;
+    border-top:1px solid #1a2418;
+    padding:6px 14px;
+    color:var(--fg-dim);font-size:11px;
+    display:flex;justify-content:space-between;align-items:center;
+    z-index:60;
+  }
+  .shellbar .l b{color:var(--accent)}
+  .shellbar .r span{margin-left:14px}
+
+  .term{
+    padding:0 0 20px;
+  }
+
+  /* top status bar (tmux-ish) */
+  .statusbar{
+    display:flex;justify-content:space-between;align-items:center;
+    border-bottom:1px solid var(--line);
+    padding:6px 10px;margin-bottom:18px;
+    color:var(--fg-dim);font-size:11px;
+    background:rgba(20,40,18,.25);
+  }
+  .statusbar .left span{margin-right:14px}
+  .statusbar .left b{color:var(--fg-bright);font-weight:500}
+  .statusbar .right{color:var(--amber)}
+
+  pre.banner{
+    color:var(--accent);
+    font-family:'VT323','JetBrains Mono',monospace;
+    font-size:18px;line-height:1;
+    text-shadow:0 0 6px rgba(57,255,20,.6),0 0 18px rgba(57,255,20,.3);
+    margin:14px 0 4px;
+    white-space:pre;
+    overflow-x:auto;
+  }
+  .tagline{color:var(--fg-dim);margin-bottom:18px;letter-spacing:1px}
+  .tagline b{color:var(--fg-bright)}
+
+  /* prompt lines */
+  .prompt{display:block;margin:6px 0;color:var(--fg)}
+  .prompt .user{color:var(--cyan)}
+  .prompt .at{color:var(--fg-dim)}
+  .prompt .host{color:var(--amber)}
+  .prompt .path{color:var(--fg-bright)}
+  .prompt .sym{color:var(--fg-dim)}
+  .prompt .cmd{color:var(--fg-bright)}
+
+  /* boxes (box-drawing) */
+  .box{
+    border:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(20,40,18,.18), rgba(10,20,10,.05));
+    padding:14px 16px;margin:12px 0;
+    box-shadow:inset 0 0 24px rgba(57,255,20,.04);
+  }
+  .box .h{
+    color:var(--amber);font-weight:500;letter-spacing:1px;
+    border-bottom:1px dashed var(--line);
+    padding-bottom:6px;margin-bottom:10px;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .box .h .tag{color:var(--fg-dim);font-size:11px}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:760px){.grid{grid-template-columns:1fr}}
+
+  .kv{display:grid;grid-template-columns:160px 1fr;row-gap:4px;column-gap:12px}
+  .kv .k{color:var(--fg-dim)}
+  .kv .v{color:var(--fg-bright)}
+  .kv .v.hot{color:var(--accent)}
+  .kv .v.warn{color:var(--amber)}
+  .kv .v.bad{color:var(--red)}
+
+  /* progress bars ASCII */
+  .bar{font-family:inherit;color:var(--fg-bright)}
+  .bar .fill{color:var(--accent)}
+  .bar .empty{color:var(--line)}
+
+  /* nav menu */
+  .nav{display:flex;flex-wrap:wrap;gap:14px;margin:10px 0 4px;color:var(--fg-dim)}
+  .nav a{color:var(--fg);text-decoration:none;border-bottom:1px dashed transparent;padding:2px 0}
+  .nav a b{color:var(--accent);margin-right:4px}
+  .nav a:hover{color:var(--fg-bright);border-color:var(--accent);text-shadow:0 0 8px var(--accent)}
+
+  /* mint button = ascii-styled */
+  .mint-wrap{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin:14px 0}
+  .btn{
+    background:transparent;color:var(--accent);
+    border:1px solid var(--accent);
+    padding:10px 22px;font-family:inherit;font-size:14px;
+    cursor:pointer;letter-spacing:2px;font-weight:700;
+    text-shadow:0 0 6px var(--accent);
+    box-shadow:inset 0 0 20px rgba(57,255,20,.08), 0 0 16px rgba(57,255,20,.15);
+    transition:all .15s ease;
+  }
+  .btn:hover{background:rgba(57,255,20,.12);box-shadow:inset 0 0 30px rgba(57,255,20,.18), 0 0 30px rgba(57,255,20,.4)}
+  .btn:disabled{color:var(--fg-dim);border-color:var(--line);cursor:not-allowed;text-shadow:none;box-shadow:none}
+  .btn.ghost{color:var(--fg);border-color:var(--fg-dim)}
+  .btn.amber{color:var(--amber);border-color:var(--amber);text-shadow:0 0 6px var(--amber)}
+
+  .mint-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .qty{
+    background:transparent;border:1px solid var(--line);
+    color:var(--fg-bright);padding:8px 10px;font-family:inherit;font-size:14px;
+    width:80px;text-align:center;
+  }
+  .qty:focus{outline:none;border-color:var(--accent)}
+
+  /* live log feed */
+  .log{
+    background:rgba(0,0,0,.45);
+    border:1px solid var(--line);
+    padding:10px 12px;font-size:12px;height:170px;overflow:hidden;
+    position:relative;
+  }
+  .log .row{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--fg-dim)}
+  .log .row .t{color:var(--cyan)}
+  .log .row .ok{color:var(--accent)}
+  .log .row .warn{color:var(--amber)}
+  .log .row .err{color:var(--red)}
+  .log .row .h{color:var(--fg-bright)}
+
+  .blink{animation:blink 1.05s steps(2,start) infinite}
+  @keyframes blink{to{visibility:hidden}}
+
+  .typed::after{
+    content:"_";color:var(--accent);animation:blink 1s steps(2,start) infinite;
+  }
+
+  hr.dotted{border:0;border-top:1px dashed var(--line);margin:18px 0}
+
+  .footer{
+    margin-top:30px;color:var(--fg-dim);font-size:11px;
+    border-top:1px solid var(--line);padding-top:10px;
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px
+  }
+  .footer a{color:var(--fg);text-decoration:none}
+  .footer a:hover{color:var(--accent)}
+
+  /* small chips */
+  .chip{display:inline-block;padding:1px 8px;border:1px solid var(--line);font-size:11px;color:var(--fg-dim);margin-right:6px}
+  .chip.on{color:var(--accent);border-color:var(--accent)}
+  .chip.warn{color:var(--amber);border-color:var(--amber)}
+
+  ::selection{background:var(--accent);color:#000}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-track{background:var(--bg-deep)}
+  ::-webkit-scrollbar-thumb{background:var(--line)}
+  ::-webkit-scrollbar-thumb:hover{background:var(--fg-dim)}
+
+  /* ========= ANIMATIONS (subtle, terminal-style) ========= */
+
+  /* boot reveal — gentle CRT power-on */
+  @keyframes powerOn{
+    0%{transform:scaleY(.01);opacity:0;filter:brightness(1.6)}
+    35%{transform:scaleY(.01);opacity:.6;filter:brightness(1.6)}
+    70%{transform:scaleY(1);opacity:1;filter:brightness(1.4)}
+    100%{transform:scaleY(1);opacity:1;filter:brightness(1)}
+  }
+  .window{ animation: powerOn .9s ease-out both }
+
+  /* sequential reveal: section starts hidden, JS unhides */
+  .stage{display:none}
+  .stage.shown{display:block;animation:fadeUp .25s ease-out both}
+  @keyframes fadeUp{
+    from{opacity:0;transform:translateY(4px)}
+    to{opacity:1;transform:translateY(0)}
+  }
+
+  /* typing caret on the active line */
+  .typing::after{
+    content:"▋";color:var(--accent);margin-left:2px;
+    animation:blink 1s steps(2,start) infinite;
+  }
+
+  /* button breathing when ready */
+  @keyframes readyPulse{
+    0%,100%{box-shadow:inset 0 0 20px rgba(57,255,20,.08), 0 0 16px rgba(57,255,20,.15)}
+    50%{box-shadow:inset 0 0 30px rgba(57,255,20,.2), 0 0 28px rgba(57,255,20,.4)}
+  }
+  .btn:not(:disabled):not(.ghost){animation:readyPulse 2.4s ease-in-out infinite}
+
+  /* interactive shell input */
+  .shell-input{
+    background:transparent;border:none;outline:none;
+    color:var(--fg-bright);font-family:inherit;font-size:13px;
+    caret-color:var(--accent);width:60%;padding:0;
+    text-shadow:inherit;
+  }
+  .shell-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+
+  /* sound toggle in shellbar */
+  .soundbtn{cursor:pointer;color:var(--fg-dim);user-select:none;padding:0 6px}
+  .soundbtn:hover{color:var(--accent)}
+  .soundbtn.on{color:var(--accent)}
+
+  /* first-time tip pill */
+  .first-tip{
+    display:inline-block;padding:4px 10px;margin:8px 0;
+    border:1px dashed var(--amber);color:var(--amber);
+    font-size:11px;border-radius:2px;
+    animation:tipPulse 2s ease-in-out infinite;
+  }
+  @keyframes tipPulse{
+    0%,100%{box-shadow:0 0 0 0 rgba(255,176,0,.0)}
+    50%{box-shadow:0 0 0 4px rgba(255,176,0,.15)}
+  }
+
+  /* theme variants — JS toggles a class on body */
+  body.theme-amber{
+    --fg:#ffcf6e; --fg-dim:#9a7530; --fg-bright:#ffe5a8;
+    --accent:#ffb000; --amber:#ffe082;
+  }
+  body.theme-cyan{
+    --fg:#9ce8ff; --fg-dim:#3e7c8c; --fg-bright:#d4f6ff;
+    --accent:#5ce8ff; --amber:#ffd3a3;
+  }
+  body.theme-magenta{
+    --fg:#ffa8e8; --fg-dim:#8a3a72; --fg-bright:#ffd5f3;
+    --accent:#ff5ce8; --amber:#ffb6e0;
+  }
+
+  /* ============================================================
+     MOBILE — viewport <= 760px
+     ============================================================ */
+  @media (max-width: 760px){
+    body{ padding: 8px 6px 24px; font-size:12px }
+    html, body{ font-size:12px }
+
+    .window{
+      max-width:100%;
+      border-radius:6px;
+    }
+    .titlebar{ padding:7px 10px; gap:8px }
+    .titlebar .title{ font-size:10.5px; letter-spacing:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+    .titlebar .icons{ display:none }
+    .traffic span{ width:10px; height:10px }
+
+    .tabs{ font-size:10.5px }
+    .tabs .tab{ padding:6px 9px; gap:6px }
+    .tabs .tab .x{ display:none }
+    .tabs .tab.new{ padding:6px 8px }
+
+    .screen{ padding: 14px 12px 56px }
+    .term{ padding-bottom:8px }
+
+    .statusbar{
+      padding:5px 8px; font-size:9.5px;
+      flex-wrap:wrap; gap:4px;
+    }
+    .statusbar .left{ display:none }   /* hide tmux long line */
+    .statusbar .right{ width:100%; text-align:right; font-size:9.5px }
+
+    pre.banner{
+      font-size:10px;            /* shrink ASCII banner */
+      line-height:1;
+      overflow-x:auto;
+      white-space:pre;
+      -webkit-overflow-scrolling:touch;
+      margin:6px 0 4px;
+    }
+    .tagline{ font-size:11px; line-height:1.5 }
+    .tagline b{ display:block }   /* stack on mobile */
+
+    /* nav: pills full width */
+    .nav{ gap:8px 12px; font-size:11px }
+    .nav a{ padding:3px 0 }
+
+    /* mint box stays single col (was already), tighten spacing */
+    .grid{ gap:18px }
+    .kv{ grid-template-columns: 110px 1fr; column-gap:8px }
+
+    .mint-row{ flex-direction:column; align-items:stretch; gap:8px }
+    .btn{ font-size:13px; padding:11px 16px; letter-spacing:1px; width:100% }
+    .qty{ width:64px }
+
+    /* boxes — hide the long ╭── ── ──╮ ascii lines on mobile */
+    .box{ padding:10px 12px }
+    .box .h{
+      flex-wrap:wrap; gap:6px;
+      font-size:11px;
+      /* hide the box-drawing line via overflow */
+      max-height:24px; overflow:hidden;
+    }
+    .box .h .tag{ font-size:10px }
+
+    /* pre blocks scroll horizontally instead of breaking layout */
+    .box pre{
+      font-size:10.5px;
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+    }
+
+    /* shell input — full width */
+    .shell-input{ width: calc(100% - 130px) }
+    .shell-line{ font-size:12px }
+    .prompt{ font-size:12px; word-wrap:break-word }
+    .prompt pre{ font-size:11px }
+
+    /* live feed log */
+    .log{ height:140px; font-size:10.5px }
+
+    /* shellbar collapse: only sound + clock */
+    .shellbar{ padding:5px 10px; font-size:9.5px; gap:6px; flex-wrap:wrap }
+    .shellbar .l{ font-size:9px; flex:1 1 100%; text-align:left }
+    .shellbar .l span:nth-of-type(2),
+    .shellbar .l span:nth-of-type(3){ display:none }  /* hide tty/0 utf-8 */
+    .shellbar .r{ display:flex; gap:8px; flex:1 1 auto; justify-content:flex-end }
+    .shellbar .r > span:not(#shellclock):not(#soundBtn){ display:none } /* hide cpu/mem/net/peers */
+
+    /* footer */
+    .footer{ font-size:10.5px; flex-direction:column; gap:6px }
+
+    /* CRT effects toned down on mobile */
+    .screen::before{ background:repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px, rgba(0,0,0,0.14) 3px, rgba(0,0,0,0) 4px) }
+  }
+
+  /* very small phones */
+  @media (max-width: 380px){
+    pre.banner{ font-size:8.5px }
+    .tabs .tab{ padding:6px 7px }
+    .nav{ font-size:10.5px }
+    .kv{ grid-template-columns: 96px 1fr; font-size:11px }
+  }
+
+  /* status chip pulse for LIVE */
+  .chip.on{animation:chipPulse 1.6s ease-in-out infinite}
+  @keyframes chipPulse{
+    0%,100%{box-shadow:0 0 0 0 rgba(57,255,20,.55)}
+    50%{box-shadow:0 0 0 4px rgba(57,255,20,0)}
+  }
+</style>
+</head>
+<body>
+
+<div class="window">
+
+  <!-- macOS-style titlebar -->
+  <div class="titlebar">
+    <div class="traffic"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+    <div class="title"><b>guest@prjct0</b>: ~/mint &nbsp;—&nbsp; ssh prjct0.xyz &nbsp;—&nbsp; 142×42</div>
+    <div class="icons">⌥ ⇧ ⌘ &nbsp; <span style="color:var(--accent)">●</span></div>
+  </div>
+
+  <!-- terminal tabs -->
+  <div class="tabs">
+    <div class="tab active" data-target="mint">● <span>mint</span> <span class="x">×</span></div>
+    <div class="tab" data-target="wp">○ <span>whitepaper</span> <span class="x">×</span></div>
+    <div class="tab" data-target="tok">○ <span>tokenomics</span> <span class="x">×</span></div>
+    <div class="tab" data-target="road">○ <span>roadmap</span> <span class="x">×</span></div>
+    <div class="tab" data-target="feed">○ <span>logs:tail -f</span> <span class="x">×</span></div>
+    <div class="tab new">[ + ]</div>
+  </div>
+
+  <!-- CRT screen -->
+  <div class="screen">
+
+  <div class="term">
+
+  <!-- tmux-style status bar -->
+  <div class="statusbar">
+    <div class="left">
+      <span>[<b>prjct0</b>] 0:mint*  1:whitepaper  2:tokenomics  3:roadmap  4:logs</span>
+    </div>
+    <div class="right" id="clock">"hostname.PRJCT0"  ──  loading…</div>
+  </div>
+
+  <!-- ASCII banner -->
+  <div class="stage" id="stg-banner">
+<pre class="banner">
+ ██████╗ ██████╗      ██╗ ██████╗████████╗     ██████╗ 
+ ██╔══██╗██╔══██╗     ██║██╔════╝╚══██╔══╝    ██╔═████╗
+ ██████╔╝██████╔╝     ██║██║        ██║       ██║██╔██║
+ ██╔═══╝ ██╔══██╗██   ██║██║        ██║       ████╔╝██║
+ ██║     ██║  ██║╚█████╔╝╚██████╗   ██║       ╚██████╔╝
+ ╚═╝     ╚═╝  ╚═╝ ╚════╝  ╚═════╝   ╚═╝        ╚═════╝ 
+        P  R  O  J  E  C  T   ─   Z  E  R  O
+</pre>
+    <div class="tagline">
+      &gt; <b>GPU-mintable proof-of-work memecoin</b>
+      &nbsp;//&nbsp; <span style="color:var(--cyan)">eth + base</span>
+      &nbsp;//&nbsp; v0.0.1-alpha
+      &nbsp;//&nbsp; built by anons, for anons.
+    </div>
+  </div>
+
+  <!-- pseudo prompt boot sequence — typed by JS -->
+  <div id="bootlog"></div>
+
+  <div class="stage" id="stg-nav">
+    <hr class="dotted"/>
+    <div class="nav">
+      <a href="#mint"><b>[01]</b>mint</a>
+      <a href="#wp"><b>[02]</b>whitepaper</a>
+      <a href="#tok"><b>[03]</b>tokenomics</a>
+      <a href="#road"><b>[04]</b>roadmap</a>
+      <a href="#feed"><b>[05]</b>live_feed</a>
+      <a href="#faq"><b>[06]</b>faq</a>
+    </div>
+    <hr class="dotted"/>
+  </div>
+
+  <!-- MINT panel -->
+  <a id="mint"></a>
+  <div class="box stage" id="stg-mint">
+    <div class="h">
+      ╭─[ 01 :: mint ]──────────────────────────────────────╮
+      <span class="tag">status: <span class="chip on">LIVE</span> <span class="chip">phase 0</span></span>
+    </div>
+
+    <div class="grid">
+      <div>
+        <div class="kv">
+          <div class="k">contract</div><div class="v">0xPRJCT0…dEAd</div>
+          <div class="k">chain</div><div class="v">ethereum + base</div>
+          <div class="k">total supply</div><div class="v">21,000,000 PRJCT0</div>
+          <div class="k">per mint</div><div class="v hot" id="kvPerMint">500 PRJCT0</div>
+          <div class="k">phase</div><div class="v"><span class="chip on">phase 0</span> halving every 21k mints</div>
+          <div class="k">minted</div><div class="v hot" id="kvMinted">1,247,500</div>
+          <div class="k">fee / mint</div><div class="v warn">$0.20 (~0.00007 ETH)</div>
+          <div class="k">algo</div><div class="v">keccak256 PoW (GPU)</div>
+          <div class="k">cap / wallet</div><div class="v warn">10,000 PRJCT0 (20 mints)</div>
+          <div class="k">your balance</div><div class="v">— (connect wallet)</div>
+        </div>
+
+        <div style="margin-top:12px">
+          <div class="bar" id="supplyBar"></div>
+          <div style="color:var(--fg-dim);font-size:11px;margin-top:4px" id="supplyPct">5.94% minted // 19,752,500 left</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="kv">
+          <div class="k">your wallet</div><div class="v" id="addr">0x0000…0000</div>
+          <div class="k">network</div><div class="v">— /  <span class="chip warn">not connected</span></div>
+          <div class="k">est. gas</div><div class="v">~0.00084 ETH</div>
+          <div class="k">slots avail</div><div class="v hot">20 / 20</div>
+        </div>
+
+        <div class="mint-wrap">
+          <span class="prompt" style="margin-top:4px">
+            <span class="user">root</span><span class="at">@</span><span class="host">prjct0</span><span class="sym">:</span><span class="path">/mint</span><span class="sym">$</span> <span class="cmd">./mint --qty <input class="qty" id="qty" value="1" type="number" min="1" max="20"/> --gpu</span>
+          </span>
+          <div class="mint-row">
+            <button class="btn" id="connectBtn">[ CONNECT_WALLET ]</button>
+            <button class="btn amber" id="mintBtn" disabled>[ EXECUTE_MINT ]</button>
+            <button class="btn ghost">[ ABORT ]</button>
+          </div>
+          <div style="color:var(--fg-dim);font-size:11px;max-width:380px">
+            *each mint costs <b style="color:var(--amber)">$0.20</b> (anti-spam) + gas. yields <b style="color:var(--accent)">500</b> PRJCT0 in phase 0. fee splits: 50% LP / 30% burn / 20% bounty. don&apos;t share private keys with anyone, ever.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WHITEPAPER -->
+  <a id="wp"></a>
+  <div class="box stage" id="stg-wp">
+    <div class="h">
+      ╭─[ 02 :: whitepaper.txt ]────────────────────────────╮
+      <span class="tag">v0.1 // 14 May 2026 // 4 pages</span>
+    </div>
+<pre style="color:var(--fg);white-space:pre-wrap;font-size:12px;line-height:1.55">
+<span style="color:var(--amber)">## ABSTRACT</span>
+PRJCT0 is a fair-launch GPU-mintable PoW memecoin on EVM
+chains. zero presale. zero team allocation. zero VCs.
+<b>21,000,000</b> total supply, halving every 21,000 mints —
+bitcoin-coded scarcity in a memecoin wrapper.
+
+<span style="color:var(--amber)">## WHY</span>
+the mint flow on most "fair launch" tokens is a lie. bots
+sweep, snipers front-run, devs rug. PRJCT0 inverts the
+problem: you can only mint by computing keccak256
+hashes that satisfy difficulty D on your own GPU. no
+batch buying. no bundling. no ape advantage.
+
+<span style="color:var(--amber)">## MECHANISM</span>
+each mint() call requires (msg.sender, nonce) such that
+keccak256(sender || nonce) &lt; target. target adjusts
+every 256 mints to hold ≈90s/block global mint rate.
+fee per mint: <b>$0.20</b> (anti-spam, paid in native gas
+token). split 50% LP / 30% burn / 20% public bounty.
+contract enforces a <b>10,000 PRJCT0</b> hard cap per wallet
+(= 20 mints in phase 0).
+
+<span style="color:var(--amber)">## SUPPLY &amp; HALVING</span>
+total: <b>21,000,000</b> PRJCT0. minting follows a halving
+schedule, every 21,000 mints supply-per-mint halves:
+
+  phase 0 :  500 PRJCT0/mint  →  10,500,000 minted
+  phase 1 :  250 PRJCT0/mint  →   5,250,000 minted
+  phase 2 :  125 PRJCT0/mint  →   2,625,000 minted
+  phase 3 :   62 PRJCT0/mint  →   1,302,000 minted
+  phase 4 :   31 PRJCT0/mint  →     651,000 minted
+  phase 5+:  ...               →     672,000 minted
+                                ─────────────────
+                          TOTAL ≈ 21,000,000 PRJCT0
+
+when phase ∞ ends, contract self-locks. any later
+"mint" reverts with <span style="color:var(--red)">0x0NULL</span>.
+
+<span style="color:var(--amber)">## DISCLAIMER</span>
+this is a meme experiment. expect bugs, expect zero
+liquidity, expect to lose. do not buy with money you
+cannot afford to set on fire.
+</pre>
+    <div style="margin-top:10px">
+      <button class="btn ghost">[ DOWNLOAD .pdf ]</button>
+      <button class="btn ghost">[ READ .md ]</button>
+    </div>
+  </div>
+
+  <!-- TOKENOMICS -->
+  <a id="tok"></a>
+  <div class="box stage" id="stg-tok">
+    <div class="h">
+      ╭─[ 03 :: tokenomics ]────────────────────────────────╮
+      <span class="tag">supply 21,000,000 PRJCT0 // halving // hard-capped</span>
+    </div>
+<pre style="color:var(--fg);font-size:12px">
+ALLOCATION                              %        AMOUNT
+────────────────────────────────────────────────────
+public mint  (PoW, GPU)                 <span style="color:var(--accent)">100%</span>    21,000,000
+team / dev                              <span style="color:var(--red)">  0%</span>             0
+treasury / kol                          <span style="color:var(--red)">  0%</span>             0
+private sale / vc                       <span style="color:var(--red)">  0%</span>             0
+liquidity bootstrap                     <span style="color:var(--red)">  0%</span>             0
+────────────────────────────────────────────────────
+TOTAL                                  100%    21,000,000
+
+<span style="color:var(--amber)">HALVING SCHEDULE</span>
+─────────────────────────────────────────────────────────
+PHASE   PER_MINT   MINTS    PRJCT0 RELEASED   CUMULATIVE
+─────────────────────────────────────────────────────────
+  0      500       21,000    10,500,000        50.00%
+  1      250       21,000     5,250,000        75.00%
+  2      125       21,000     2,625,000        87.50%
+  3       62       21,000     1,302,000        93.70%
+  4       31       21,000       651,000        96.80%
+  5+     ...        ...        672,000        100.0%
+─────────────────────────────────────────────────────────
+
+<span style="color:var(--amber)">FEE STRUCTURE</span>  $0.20 per mint  (anti-spam + LP seed)
+─────────────────────────────────────────────────────────
+  50%  →  liquidity pool  (locked 1 year)
+  30%  →  buyback &amp; burn  (deflation)
+  20%  →  public bounty   (top miners, audit)
+─────────────────────────────────────────────────────────
+  lifetime raise: ~8,400 USD  (42,000 mints × $0.20)
+
+<span style="color:var(--amber)">PER-WALLET CAP</span>  10,000 PRJCT0  (= 20 mints in phase 0)
+─────────────────────────────────────────────────────────
+  enforced on-chain. cannot exceed regardless of phase.
+  cap is in tokens, not mints — phases ≥1 = more mints.
+
+<span style="color:var(--fg-dim)">// liquidity is whatever the community provides post-mint.
+// developers do NOT hold a wallet. contract is renounced at deploy.</span>
+</pre>
+  </div>
+
+  <!-- ROADMAP -->
+  <a id="road"></a>
+  <div class="box stage" id="stg-road">
+    <div class="h">
+      ╭─[ 04 :: roadmap.log ]───────────────────────────────╮
+      <span class="tag">last commit: 14 May 2026 22:30</span>
+    </div>
+<pre style="color:var(--fg);font-size:12px;line-height:1.55">
+[<span style="color:var(--accent)">DONE</span>]   phase -1   shitpost the idea on tg
+[<span style="color:var(--accent)">DONE</span>]   phase  0   contract deploy + mint open  ← <span class="blink" style="color:var(--accent)">●</span> we are here
+[<span style="color:var(--amber)">WIP </span>]   phase  1   community LP on uniswap v3
+[ <span style="color:var(--fg-dim)">..</span> ]   phase  2   bridge to base via canonical
+[ <span style="color:var(--fg-dim)">..</span> ]   phase  3   on-chain leaderboard of top miners
+[ <span style="color:var(--fg-dim)">..</span> ]   phase  4   nfts for top-100 miners (free, opt-in)
+[ <span style="color:var(--fg-dim)">..</span> ]   phase  ∞   abandonment. token survives or it dies.
+</pre>
+  </div>
+
+  <!-- LIVE FEED -->
+  <a id="feed"></a>
+  <div class="box stage" id="stg-feed">
+    <div class="h">
+      ╭─[ 05 :: live_feed ]─────────────────────────────────╮
+      <span class="tag"><span class="chip on">streaming</span> mempool + mints</span>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <!-- FAQ -->
+  <a id="faq"></a>
+  <div class="box stage" id="stg-faq">
+    <div class="h">
+      ╭─[ 06 :: faq.man ]───────────────────────────────────╮
+      <span class="tag">man prjct0(7)</span>
+    </div>
+<pre style="color:var(--fg);font-size:12px;line-height:1.55">
+<span style="color:var(--amber)">Q.</span> is this a rug?
+<span style="color:var(--accent)">A.</span> contract is renounced. there is no team wallet. but
+   you can absolutely lose money — that&apos;s on you.
+
+<span style="color:var(--amber)">Q.</span> i don&apos;t have a gpu, can i still mint?
+<span style="color:var(--accent)">A.</span> yes. cpu fallback works at ~1/200 the speed of a
+   mid-range gpu. expect to wait. or rent a gpu on vast.
+
+<span style="color:var(--amber)">Q.</span> why 1,000,000 supply?
+<span style="color:var(--accent)">A.</span> because it&apos;s a vibe. don&apos;t overthink memecoins.
+
+<span style="color:var(--amber)">Q.</span> when chart, when pump?
+<span style="color:var(--accent)">A.</span> never. this is a participation trophy. enjoy mining.
+</pre>
+  </div>
+
+  <!-- footer -->
+  <div class="footer">
+    <div>
+      © 2026 PRJCT0 anons —
+      <a href="#">/whitepaper</a> ·
+      <a href="#">/contract</a> ·
+      <a href="#">/github</a> ·
+      <a href="#">/telegram</a> ·
+      <a href="#">/x</a>
+    </div>
+    <div>
+      not affiliated with any human. <span class="blink">_</span>
+    </div>
+  </div>
+
+  <span class="prompt" style="margin-top:18px;color:var(--fg-dim)">
+    [ tip ] click anywhere or scroll up to type — try <span style="color:var(--accent)">help</span>, <span style="color:var(--accent)">mint</span>, <span style="color:var(--accent)">connect</span>, <span style="color:var(--accent)">supply</span>
+  </span>
+
+</div>
+
+  <!-- bottom shellbar -->
+  <div class="shellbar">
+    <div class="l">
+      <b>●</b> connected · <span style="color:var(--fg-bright)">guest@prjct0.xyz</span> · <span>tty/0</span> · <span>utf-8</span>
+    </div>
+    <div class="r">
+      <span class="soundbtn" id="soundBtn" title="toggle sound">♪ off</span>
+      <span>cpu <b style="color:var(--accent)">12%</b></span>
+      <span>mem <b style="color:var(--accent)">214M</b></span>
+      <span>net <b style="color:var(--cyan)">↑1.2k ↓4.8k</b></span>
+      <span>peers <b style="color:var(--amber)">128</b></span>
+      <span id="shellclock">--:--:--</span>
+    </div>
+  </div>
+
+  </div><!-- /screen -->
+</div><!-- /window -->
+
+<script>
+  // clock
+  const clock = document.getElementById('clock');
+  const shellclock = document.getElementById('shellclock');
+  const tick = () => {
+    const d = new Date();
+    const t = d.toISOString().replace('T',' ').slice(0,19) + ' UTC';
+    clock.textContent = '"prjct0.xyz" :: ' + t + '  ●  block #22,481,907';
+    if(shellclock) shellclock.textContent = d.toISOString().slice(11,19) + ' UTC';
+  };
+  tick(); setInterval(tick,1000);
+
+  /* =========================================================
+     SOUND ENGINE — keystroke + chime via WebAudio
+     ========================================================= */
+  let audioCtx = null;
+  let soundOn = (localStorage.getItem('prjct0_sound') === '1');
+  function ac(){ if(!audioCtx){ try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)() }catch(e){} } return audioCtx }
+  function beep(freq=720, dur=0.04, type='square', vol=0.04){
+    if(!soundOn) return;
+    const ctx = ac(); if(!ctx) return;
+    const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.value = vol;
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + dur);
+  }
+  function chime(){ if(!soundOn) return; [880,1320,1760].forEach((f,i)=>setTimeout(()=>beep(f,0.08,'sine',0.06), i*70)); }
+  function errBeep(){ if(!soundOn) return; beep(180,0.18,'sawtooth',0.06) }
+  function key(){
+    if(!soundOn) return;
+    const f = 600 + Math.random()*220;
+    beep(f, 0.018, 'square', 0.025);
+  }
+
+  function setSoundUI(){
+    const b = document.getElementById('soundBtn');
+    if(!b) return;
+    b.textContent = soundOn ? '♪ on' : '♪ off';
+    b.classList.toggle('on', soundOn);
+  }
+  document.getElementById('soundBtn').addEventListener('click',()=>{
+    soundOn = !soundOn;
+    localStorage.setItem('prjct0_sound', soundOn?'1':'0');
+    setSoundUI();
+    if(soundOn) chime();
+  });
+  setSoundUI();
+
+  /* =========================================================
+     THEME — green (default) / amber / cyan / magenta
+     ========================================================= */
+  const savedTheme = localStorage.getItem('prjct0_theme') || 'green';
+  function setTheme(t){
+    document.body.classList.remove('theme-amber','theme-cyan','theme-magenta');
+    if(t !== 'green') document.body.classList.add('theme-'+t);
+    localStorage.setItem('prjct0_theme', t);
+  }
+  setTheme(savedTheme);
+
+  /* =========================================================
+     BOOT SEQUENCE — login prompt first, then init
+     ========================================================= */
+  const bootLines = [
+    {raw:'<span style="color:var(--fg-dim)">last login: '+(localStorage.getItem('prjct0_last')||'never')+' on tty/0</span>', wait:200},
+    {raw:'<span style="color:var(--fg-dim)">welcome back, anon. initializing PRJCT0 client...</span>', wait:200},
+    {raw:'', wait:60},
+    {cmd:'./initiate --network mainnet --chain eth,base', wait:280},
+    {log:'[ <span style="color:var(--fg-bright)">..</span> ] loading PRJCT0 manifest', resolve:' [ <span style="color:var(--accent)">OK</span> ]', wait:340},
+    {log:'[ <span style="color:var(--fg-bright)">..</span> ] resolving rpc endpoints', resolve:' [ <span style="color:var(--accent)">eth · base</span> ]', wait:360},
+    {log:'[ <span style="color:var(--fg-bright)">..</span> ] fetching contract <span style="color:var(--cyan)">0xPRJCT0…dEAd</span>', resolve:' [ <span style="color:var(--accent)">OK</span> ]', wait:340},
+    {log:'[ <span style="color:var(--fg-bright)">..</span> ] syncing block height', resolve:' [ <span style="color:var(--accent)">22,481,907</span> ]', wait:340},
+    {log:'[ <span style="color:var(--fg-bright)">..</span> ] reading mint state', resolve:' [ <span style="color:var(--accent)">1,247,500 / 21,000,000</span> ]', wait:340},
+    {log:'[ <span style="color:var(--fg-bright)">..</span> ] current phase / reward', resolve:' [ <span style="color:var(--accent)">phase 0 · 500 PRJCT0/mint</span> ]', wait:340},
+    {raw:'', wait:40},
+    {raw:'<span style="color:var(--amber)">[ system ready ]</span> type <span style="color:var(--accent)">help</span> or scroll to begin.', wait:240},
+  ];
+
+  const bootEl = document.getElementById('bootlog');
+  const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+  function makePromptLine(){
+    const p = document.createElement('div');
+    p.className = 'prompt';
+    p.innerHTML = '<span class="user">guest</span><span class="at">@</span><span class="host">prjct0</span><span class="sym">:</span><span class="path">~</span><span class="sym">$</span> <span class="t-cmd"></span><span class="cur">▋</span>';
+    return p;
+  }
+  function makeLogLine(html){
+    const p = document.createElement('div');
+    p.className = 'prompt';
+    p.style.color = 'var(--fg-dim)';
+    p.innerHTML = html;
+    return p;
+  }
+
+  async function typeChars(target, text, perChar=22, withSound=false){
+    for(let i=0;i<text.length;i++){
+      target.textContent += text[i];
+      if(withSound) key();
+      await sleep(perChar + Math.random()*18);
+    }
+  }
+
+  // CSS for blinking caret on the active line
+  const css = document.createElement('style');
+  css.textContent = `.cur{display:inline-block;width:9px;height:14px;background:var(--accent);vertical-align:text-bottom;margin-left:2px;box-shadow:0 0 8px var(--accent);animation:blink 1s steps(2,start) infinite}`;
+  document.head.appendChild(css);
+
+  // user state
+  let username = (localStorage.getItem('prjct0_user') || '').trim();
+
+  async function loginPrompt(){
+    // banner first
+    document.getElementById('stg-banner').classList.add('shown');
+    await sleep(450);
+
+    // ssh-style login lines
+    const ssh = makeLogLine('<span style="color:var(--fg-dim)">connecting to prjct0.xyz:22 ...</span>');
+    bootEl.appendChild(ssh);
+    await sleep(500);
+    const ok = makeLogLine('<span style="color:var(--fg-dim)">[ <span style="color:var(--accent)">ok</span> ] handshake complete · sha256:Pr…JcT0</span>');
+    bootEl.appendChild(ok);
+    await sleep(400);
+
+    // ask for name
+    const line = document.createElement('div');
+    line.className = 'prompt shell-line';
+    line.innerHTML = '<span style="color:var(--amber)">login as</span><span class="sym">:</span> <input class="shell-input" id="loginInput" autofocus autocomplete="off" spellcheck="false" maxlength="24" placeholder="anon"/>';
+    bootEl.appendChild(line);
+    const input = line.querySelector('input');
+    input.focus();
+
+    return new Promise(resolve=>{
+      // play key sounds while typing
+      input.addEventListener('input', ()=>{ key(); });
+      input.addEventListener('keydown', (e)=>{
+        if(e.key === 'Enter'){
+          e.preventDefault();
+          const raw = input.value.trim();
+          // sanitize: lowercase, no spaces, alnum + dash/underscore, fallback "anon"
+          let u = raw.toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,20) || 'anon';
+          username = u;
+          localStorage.setItem('prjct0_user', u);
+          localStorage.setItem('prjct0_last', new Date().toISOString().replace('T',' ').slice(0,16) + ' UTC');
+          // freeze the prompt
+          const sp = document.createElement('span');
+          sp.style.color = 'var(--fg-bright)';
+          sp.textContent = u;
+          input.replaceWith(sp);
+          // password "echoed" line for vibes
+          chime();
+          (async()=>{
+            const pw = makeLogLine('<span style="color:var(--fg-dim)">password</span><span class="sym">:</span> <span style="color:var(--fg-dim)">··········</span>');
+            bootEl.appendChild(pw);
+            await sleep(700);
+            const auth = makeLogLine('<span style="color:var(--fg-dim)">[ <span style="color:var(--accent)">ok</span> ] authenticated as <span style="color:var(--fg-bright)">'+u+'</span></span>');
+            bootEl.appendChild(auth);
+            await sleep(380);
+            // refresh hostname references in DOM
+            applyUsername();
+            resolve();
+          })();
+        } else {
+          // gentle keystroke beep
+          if(e.key.length === 1 || e.key === 'Backspace') key();
+        }
+      });
+    });
+  }
+
+  function applyUsername(){
+    // update titlebar
+    const t = document.querySelector('.titlebar .title b');
+    if(t) t.textContent = username + '@prjct0';
+    document.querySelector('.titlebar .title').innerHTML =
+      '<b>'+username+'@prjct0</b>: ~/mint &nbsp;—&nbsp; ssh prjct0.xyz &nbsp;—&nbsp; 142×42';
+    // update shellbar
+    const sb = document.querySelector('.shellbar .l');
+    if(sb) sb.innerHTML = '<b>●</b> connected · <span style="color:var(--fg-bright)">'+username+'@prjct0.xyz</span> · <span>tty/0</span> · <span>utf-8</span>';
+  }
+
+  async function runBoot(){
+    // login first
+    if(!username){
+      await loginPrompt();
+    } else {
+      document.getElementById('stg-banner').classList.add('shown');
+      await sleep(300);
+      applyUsername();
+      const wb = makeLogLine('<span style="color:var(--fg-dim)">welcome back, <span style="color:var(--fg-bright)">'+username+'</span>. resuming session...</span>');
+      bootEl.appendChild(wb);
+      await sleep(380);
+    }
+
+    for(const L of bootLines){
+      if(L.cmd){
+        const line = makePromptLine();
+        // patch prompt user
+        line.querySelector('.user').textContent = username;
+        bootEl.appendChild(line);
+        await typeChars(line.querySelector('.t-cmd'), L.cmd, 24, true);
+        line.querySelector('.cur').remove();
+        await sleep(140);
+        if(L.after){
+          const out = makeLogLine('<span style="color:var(--fg-dim)">'+L.after+'</span>');
+          bootEl.appendChild(out);
+        }
+      } else if(L.log){
+        const line = makeLogLine(L.log);
+        bootEl.appendChild(line);
+        await sleep(L.wait||300);
+        line.innerHTML = line.innerHTML.replace('[ <span style="color:var(--fg-bright)">..</span> ]','[<span style="color:var(--accent)"> ok </span>]') + L.resolve;
+        beep(880,0.02,'sine',0.03);
+      } else if(typeof L.raw === 'string'){
+        const line = makeLogLine(L.raw || '&nbsp;');
+        bootEl.appendChild(line);
+      }
+      await sleep(L.wait || 200);
+      bootEl.scrollIntoView({block:'end',behavior:'smooth'});
+    }
+
+    chime();
+
+    await sleep(250);
+    document.getElementById('stg-nav').classList.add('shown');
+    await sleep(180);
+    document.getElementById('stg-mint').classList.add('shown');
+    ['stg-wp','stg-tok','stg-road','stg-feed','stg-faq'].forEach((id,i)=>{
+      setTimeout(()=>document.getElementById(id).classList.add('shown'), 250 + i*180);
+    });
+
+    startFeed();
+
+    // first-time tip
+    if(!localStorage.getItem('prjct0_seen_tip')){
+      const tip = document.createElement('div');
+      tip.innerHTML = '<span class="first-tip">tip → type <b>help</b> · try <b>:theme amber</b> · ↑/↓ history · Tab autocomplete · Ctrl+L clear</span>';
+      bootEl.appendChild(tip);
+      localStorage.setItem('prjct0_seen_tip','1');
+    }
+
+    mountShell();
+  }
+
+  /* =========================================================
+     INTERACTIVE SHELL — real input you can type into
+     ========================================================= */
+  const cmdHistory = [];
+  let histIdx = -1;
+  let activeInput = null;
+
+  function mountShell(){
+    const line = document.createElement('div');
+    line.className = 'prompt shell-line';
+    line.innerHTML = '<span class="user">'+username+'</span><span class="at">@</span><span class="host">prjct0</span><span class="sym">:</span><span class="path">~</span><span class="sym">$</span> <input class="shell-input" autofocus autocomplete="off" spellcheck="false"/>';
+    bootEl.appendChild(line);
+    activeInput = line.querySelector('.shell-input');
+    activeInput.focus({preventScroll:true});
+    activeInput.addEventListener('keydown', onShellKey);
+    activeInput.addEventListener('input', ()=>key());
+    // gentle scroll: keep prompt near bottom of viewport, but don't trigger scrollspy
+    const r = line.getBoundingClientRect();
+    if(r.bottom > window.innerHeight - 80 || r.top < 80){
+      line.scrollIntoView({block:'center', behavior:'smooth'});
+    }
+  }
+
+  function freezePrompt(text){
+    if(!activeInput) return;
+    const parent = activeInput.parentElement;
+    const span = document.createElement('span');
+    span.style.color = 'var(--fg-bright)';
+    span.textContent = text;
+    parent.replaceChild(span, activeInput);
+    activeInput = null;
+  }
+
+  function printOut(html){
+    const div = document.createElement('div');
+    div.className = 'prompt';
+    div.style.color = 'var(--fg)';
+    div.innerHTML = html;
+    bootEl.appendChild(div);
+  }
+
+  function onShellKey(e){
+    if(e.key === 'Enter'){
+      const cmd = activeInput.value.trim();
+      freezePrompt(cmd || '');
+      if(cmd){
+        cmdHistory.push(cmd); histIdx = cmdHistory.length;
+        runCmd(cmd);
+      }
+      mountShell();
+      e.preventDefault();
+    } else if(e.key === 'ArrowUp'){
+      if(histIdx > 0){ histIdx--; activeInput.value = cmdHistory[histIdx] || ''; }
+      e.preventDefault();
+    } else if(e.key === 'ArrowDown'){
+      if(histIdx < cmdHistory.length - 1){ histIdx++; activeInput.value = cmdHistory[histIdx] || ''; }
+      else { histIdx = cmdHistory.length; activeInput.value=''; }
+      e.preventDefault();
+    } else if(e.key === 'Tab'){
+      // simple completion
+      const prefix = activeInput.value;
+      const cmds = ['help','clear','mint','connect','status','whitepaper','tokenomics','roadmap','logs','contract','supply','about','faq','exit','ls','cat','echo','whoami','uname','date','pwd','id','vim','vi','nano','fortune','cowsay','sl','hack','matrix','man','theme','sound','login','logout','su','reset','banner','figlet'];
+      const m = cmds.filter(c=>c.startsWith(prefix));
+      if(m.length === 1){ activeInput.value = m[0]; }
+      else if(m.length > 1){ printOut('<span style="color:var(--fg-dim)">'+m.join('  ')+'</span>'); }
+      e.preventDefault();
+    } else if(e.ctrlKey && e.key === 'l'){
+      bootEl.innerHTML = ''; mountShell(); e.preventDefault();
+    } else if(e.ctrlKey && e.key === 'c'){
+      freezePrompt(activeInput.value + '^C');
+      mountShell(); e.preventDefault();
+    }
+  }
+
+  async function runCmd(input){
+    const [cmd, ...args] = input.split(/\s+/);
+    const c = cmd.toLowerCase();
+    switch(c){
+      case 'help':
+      case '?':
+        printOut(`
+<span style="color:var(--amber)">PRJCT0 shell — available commands:</span>
+  <span style="color:var(--accent)">help</span>          — show this help
+  <span style="color:var(--accent)">clear</span>         — clear the screen (or Ctrl+L)
+  <span style="color:var(--accent)">connect</span>       — connect wallet
+  <span style="color:var(--accent)">mint [n]</span>      — mint n times (1..20, 500 PRJCT0 each, $0.20/mint)
+  <span style="color:var(--accent)">status</span>        — show network + wallet status
+  <span style="color:var(--accent)">supply</span>        — show mint progress + halving
+  <span style="color:var(--accent)">contract</span>      — print contract address
+  <span style="color:var(--accent)">whitepaper</span>    — open whitepaper section
+  <span style="color:var(--accent)">tokenomics</span>    — open tokenomics section
+  <span style="color:var(--accent)">roadmap</span>       — open roadmap section
+  <span style="color:var(--accent)">logs</span>          — jump to live feed
+  <span style="color:var(--accent)">faq</span>           — open faq
+  <span style="color:var(--accent)">about</span>         — about PRJCT0
+  <span style="color:var(--accent)">whoami / uname</span>— who am i / system info
+  <span style="color:var(--accent)">theme &lt;name&gt;</span>  — green | amber | cyan | magenta
+  <span style="color:var(--accent)">sound on/off</span>  — toggle keystroke sounds
+  <span style="color:var(--accent)">su &lt;name&gt;</span>     — switch identity
+  <span style="color:var(--accent)">reset</span>         — wipe local session, re-login
+  <span style="color:var(--fg-dim)">try also:</span> <span style="color:var(--cyan)">fortune  cowsay  sl  hack the planet  banner  vim  date  pwd  id</span>
+<span style="color:var(--fg-dim)">  ↑/↓ history · Tab autocomplete · Ctrl+L clear · Ctrl+C cancel</span>`); break;
+
+      case 'clear':
+      case 'cls':
+        bootEl.innerHTML = ''; break;
+
+      case 'ls':
+        printOut('<span style="color:var(--cyan)">mint/</span>  <span style="color:var(--cyan)">whitepaper.txt</span>  <span style="color:var(--cyan)">tokenomics.txt</span>  <span style="color:var(--cyan)">roadmap.log</span>  <span style="color:var(--cyan)">live_feed/</span>  <span style="color:var(--cyan)">faq.man</span>'); break;
+
+      case 'echo':
+        printOut(args.join(' ')); break;
+
+      case 'about':
+        printOut(`<span style="color:var(--amber)">PRJCT0 :: PROJECT ZERO</span>
+GPU-mintable proof-of-work memecoin on ETH + Base.
+zero presale · zero team · zero VC · zero IQ required.
+type <span style="color:var(--accent)">help</span> for more.`); break;
+
+      case 'contract':
+        printOut('<span style="color:var(--cyan)">eth :</span>  0xPRJCT00000000000000000000000000000000dEAd\n<span style="color:var(--cyan)">base:</span>  0xPRJCT00000000000000000000000000000000dEAd'); break;
+
+      case 'supply':
+        printOut(`minted: <span style="color:var(--accent)">1,247,500</span> / 21,000,000 PRJCT0  (5.94%)
+remaining: <span style="color:var(--cyan)">19,752,500</span>
+phase: <span style="color:var(--amber)">0</span>  ·  reward: <span style="color:var(--accent)">500 PRJCT0/mint</span>
+mints this phase: <span style="color:var(--cyan)">2,495 / 21,000</span>  (next halving in 18,505)
+active miners: <span style="color:var(--amber)">128</span>  global H/s: <span style="color:var(--amber)">7.42 GH/s</span>`); break;
+
+      case 'status':{
+        const connected = !document.getElementById('connectBtn').disabled === false;
+        const w = document.getElementById('addr').textContent;
+        printOut(`<span style="color:var(--fg-dim)">network</span>     ethereum + base
+<span style="color:var(--fg-dim)">block</span>       #22,481,907
+<span style="color:var(--fg-dim)">wallet</span>      ${w}
+<span style="color:var(--fg-dim)">slots</span>       25 / 25 available
+<span style="color:var(--fg-dim)">gas est.</span>    ~0.00084 ETH`);
+        break; }
+
+      case 'connect':{
+        const cb = document.getElementById('connectBtn');
+        if(cb.disabled){ printOut('<span style="color:var(--amber)">already connected: 0x29196c58…D77F</span>'); break; }
+        printOut('<span style="color:var(--fg-dim)">[ .. ] requesting wallet permission</span>');
+        await sleep(700);
+        cb.click();
+        printOut('<span style="color:var(--accent)">[ ok ] wallet connected: 0x29196c58…D77F</span>'); break; }
+
+      case 'mint':{
+        const mb = document.getElementById('mintBtn');
+        if(mb.disabled && mb.textContent.includes('MINTED')){
+          printOut('<span style="color:var(--amber)">you already minted this session.</span>'); break;
+        }
+        if(mb.disabled){
+          printOut('<span style="color:var(--red)">[ err ] wallet not connected. run `connect` first.</span>'); break;
+        }
+        const n = Math.max(1, Math.min(20, parseInt(args[0])||1));
+        const reward = n * 500;
+        const fee = (n * 0.20).toFixed(2);
+        document.getElementById('qty').value = n;
+        printOut(`<span style="color:var(--fg-dim)">[ .. ] requesting puzzle for <b style="color:var(--cyan)">${n}</b> mint(s) · reward <b style="color:var(--accent)">${reward.toLocaleString()}</b> PRJCT0 · fee <b style="color:var(--amber)">$${fee}</b></span>`);
+        await sleep(500);
+        printOut('<span style="color:var(--fg-dim)">[ .. ] starting GPU keccak256 search · target=0x000007a1…</span>');
+        await sleep(900);
+        printOut(`<span style="color:var(--accent)">[ ok ] nonce found in ${(2+Math.random()*2).toFixed(1)}s</span>`);
+        await sleep(400);
+        printOut('<span style="color:var(--fg-dim)">[ .. ] submitting tx to mempool · gas=21 gwei + $0.20 fee</span>');
+        await sleep(800);
+        printOut(`<span style="color:var(--accent)">[ ok ] tx 0x${hex(12)} included in block #22,481,908</span>`);
+        printOut(`<span style="color:var(--amber)">✓ minted ${reward.toLocaleString()} PRJCT0 (${n} mint × 500) for $${fee}.</span>`);
+        mb.click(); break; }
+
+      case 'whitepaper': case 'wp': switchTab('wp'); printOut('<span style="color:var(--fg-dim)">→ whitepaper.txt</span>'); break;
+      case 'tokenomics': case 'tok': switchTab('tok'); printOut('<span style="color:var(--fg-dim)">→ tokenomics</span>'); break;
+      case 'roadmap': case 'road': switchTab('road'); printOut('<span style="color:var(--fg-dim)">→ roadmap.log</span>'); break;
+      case 'logs': case 'tail': case 'feed': switchTab('feed'); printOut('<span style="color:var(--fg-dim)">→ tailing live feed…</span>'); break;
+      case 'faq': switchTab('faq'); printOut('<span style="color:var(--fg-dim)">→ man prjct0(7)</span>'); break;
+      case 'home': case 'top': switchTab('mint'); break;
+      case 'cat':{
+        const f = (args[0]||'').toLowerCase();
+        if(f.includes('whitepaper')) { switchTab('wp'); printOut('<span style="color:var(--fg-dim)">→ rendering whitepaper.txt</span>'); }
+        else if(f.includes('roadmap')) { switchTab('road'); printOut('<span style="color:var(--fg-dim)">→ rendering roadmap.log</span>'); }
+        else if(f.includes('faq')) { switchTab('faq'); printOut('<span style="color:var(--fg-dim)">→ rendering faq.man</span>'); }
+        else if(f.includes('token')) { switchTab('tok'); printOut('<span style="color:var(--fg-dim)">→ rendering tokenomics</span>'); }
+        else printOut(`<span style="color:var(--red)">cat: ${args[0]||''}: No such file</span>`);
+        break; }
+
+      case 'exit': case 'quit': case 'logout':
+        printOut('<span style="color:var(--amber)">connection refused: there is no escape from PRJCT0.</span>'); break;
+
+      case 'sudo':
+        printOut('<span style="color:var(--red)">guest is not in the sudoers file. this incident will be reported.</span>'); break;
+
+      case 'rm':
+        printOut('<span style="color:var(--red)">nice try, anon.</span>'); errBeep(); break;
+
+      /* ============ EASTER EGGS ============ */
+      case 'whoami':
+        printOut(`<span style="color:var(--fg-bright)">${username}</span>  <span style="color:var(--fg-dim)">// uid=1000 gid=1000 groups=anons,degens</span>`); break;
+
+      case 'uname':{
+        const opt = (args[0]||'').replace(/^-/,'');
+        if(opt.includes('a')) printOut('PRJCT0 prjct0.xyz 0.0.1-alpha #1 SMP keccak256 GNU/Anon');
+        else printOut('PRJCT0');
+        break; }
+
+      case 'date':
+        printOut(new Date().toString()); break;
+
+      case 'pwd':
+        printOut('/home/'+username+'/mint'); break;
+
+      case 'id':
+        printOut(`uid=1000(${username}) gid=1000(${username}) groups=1000(${username}),99(degens),777(miners)`); break;
+
+      case 'vim': case 'vi': case 'nano': case 'emacs':
+        printOut(`<span style="color:var(--amber)">${cmd}: there is only one editor here, and it is the EVM. press Esc to exit.</span>`); break;
+
+      case ':wq': case ':q': case ':q!': case ':x':
+        printOut(`<span style="color:var(--red)">E37: not in vim, anon. you can&apos;t escape.</span>`); errBeep(); break;
+
+      case 'fortune':{
+        const f = [
+          'the meek shall inherit the gas refund.',
+          'in the beginning was the keccak, and the keccak was hash, and the keccak was 0x.',
+          '"buy high, sell never" — sun tzu, the art of bagholding',
+          'a wallet without a seedphrase is a wallet without sin.',
+          'when in doubt, mint it out.',
+          'the only winning move is to never sell.',
+          'gas fees are the universe&apos;s tax on impatience.',
+        ];
+        printOut('<span style="color:var(--amber)">'+f[Math.floor(Math.random()*f.length)]+'</span>'); break; }
+
+      case 'cowsay':{
+        const msg = args.join(' ') || 'mint $PRJCT0';
+        const top = ' ' + '_'.repeat(msg.length+2);
+        const bot = ' ' + '-'.repeat(msg.length+2);
+        printOut(`<pre style="color:var(--fg-bright);margin:0;line-height:1.1">${top}
+&lt; ${msg} &gt;
+${bot}
+        \\   ^__^
+         \\  (oo)\\_______
+            (__)\\       )\\/\\
+                ||----w |
+                ||     ||</pre>`); break; }
+
+      case 'sl':
+        printOut('<pre style="color:var(--fg-bright);font-size:11px;line-height:1.1;margin:0">      ====        ________                ___________ \n  _D _|  |_______/        \\__I_I_____===__|_________| \n   |(_)---  |   H\\________/ |   |        =|___ ___|   \n   /     |  |   H  |  |     |   |         ||_| |_||   \n  |      |  |   H  |__--------------------| [___] |   \n  | ________|___H__/__|_____/[][]~\\_______|       |   \n  |/ |   |-----------I_____I [][] []  D   |=======|__ \n__/ =| o |=-O=====O=====O=====O \\ ____Y___________|__ \n |/-=|___|=    ||    ||    ||    |_____/~\\___/        \n  \\_/      \\__/  \\__/  \\__/  \\__/      \\_/            </pre>'); break;
+
+      case 'hack':{
+        if((args[0]||'').toLowerCase() === 'the' && (args[1]||'').toLowerCase() === 'planet'){
+          printOut('<span style="color:var(--accent)">HACK THE PLANET!! HACK THE PLANET!! HACK THE PLANET!!</span>');
+          chime();
+        } else printOut(`<span style="color:var(--red)">hack: usage: hack the planet</span>`);
+        break; }
+
+      case 'matrix':
+        printOut('<span style="color:var(--fg-dim)">matrix mode is for posers. you are already inside.</span>'); break;
+
+      case 'man':{
+        const t = (args[0]||'').toLowerCase();
+        if(t==='prjct0' || t==='') { switchTab('faq'); printOut('<span style="color:var(--fg-dim)">→ man prjct0(7)</span>'); }
+        else printOut(`<span style="color:var(--red)">No manual entry for ${args[0]||''}</span>`);
+        break; }
+
+      case 'theme': case ':theme':{
+        const t = (args[0]||'').toLowerCase();
+        const ok = ['green','amber','cyan','magenta'];
+        if(!t){ printOut('<span style="color:var(--fg-dim)">usage: theme &lt;green|amber|cyan|magenta&gt;</span>  current: <b>'+(localStorage.getItem('prjct0_theme')||'green')+'</b>'); break; }
+        if(!ok.includes(t)){ printOut('<span style="color:var(--red)">unknown theme: '+t+'</span>  available: '+ok.join(', ')); errBeep(); break; }
+        setTheme(t);
+        chime();
+        printOut('<span style="color:var(--accent)">theme set to '+t+'</span>'); break; }
+
+      case 'sound': case ':sound':{
+        const t = (args[0]||'').toLowerCase();
+        if(t==='on'||t==='off'){ soundOn = (t==='on'); localStorage.setItem('prjct0_sound', soundOn?'1':'0'); setSoundUI(); printOut('<span style="color:var(--accent)">sound '+t+'</span>'); if(soundOn) chime(); }
+        else { printOut('<span style="color:var(--fg-dim)">usage: sound on|off · current: '+(soundOn?'on':'off')+'</span>'); }
+        break; }
+
+      case 'login': case 'logout': case 'su':{
+        if(args[0]){
+          const u = args[0].toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,20) || 'anon';
+          username = u;
+          localStorage.setItem('prjct0_user', u);
+          applyUsername();
+          printOut('<span style="color:var(--accent)">switched user → '+u+'</span>');
+        } else {
+          localStorage.removeItem('prjct0_user');
+          printOut('<span style="color:var(--amber)">session cleared. refresh to log in again.</span>');
+        }
+        break; }
+
+      case 'reset':{
+        localStorage.removeItem('prjct0_user');
+        localStorage.removeItem('prjct0_seen_tip');
+        printOut('<span style="color:var(--amber)">localStorage cleared. refreshing in 1s...</span>');
+        setTimeout(()=>location.reload(), 1000); break; }
+
+      case 'banner': case 'figlet':
+        printOut('<pre style="color:var(--accent);text-shadow:0 0 6px var(--accent);font-size:12px;line-height:1;margin:0"> ██████╗ ██████╗      ██╗ ██████╗████████╗     ██████╗ \n ██╔══██╗██╔══██╗     ██║██╔════╝╚══██╔══╝    ██╔═████╗\n ██████╔╝██████╔╝     ██║██║        ██║       ██║██╔██║\n ██╔═══╝ ██╔══██╗██   ██║██║        ██║       ████╔╝██║\n ██║     ██║  ██║╚█████╔╝╚██████╗   ██║       ╚██████╔╝\n ╚═╝     ╚═╝  ╚═╝ ╚════╝  ╚═════╝   ╚═╝        ╚═════╝</pre>'); break;
+
+      default:
+        printOut(`<span style="color:var(--red)">${cmd}: command not found</span>  ·  type <span style="color:var(--accent)">help</span>`); errBeep();
+    }
+    // play soft confirm beep on most successful commands
+    if(['help','ls','about','contract','supply','status','whoami','uname','date','id','pwd','fortune','clear','cls'].includes(c)){
+      beep(720,0.02,'sine',0.025);
+    }
+  }
+
+  /* =========================================================
+     TAB CLICK + scrollspy
+     ========================================================= */
+  const tabMap = {mint:'mint',wp:'wp',tok:'tok',road:'road',feed:'feed'};
+  function switchTab(target){
+    document.querySelectorAll('.tab[data-target]').forEach(t=>{
+      const on = t.dataset.target === target;
+      t.classList.toggle('active', on);
+      t.firstChild.textContent = on ? '● ' : '○ ';
+    });
+    const el = document.getElementById(target);
+    if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  document.querySelectorAll('.tab[data-target]').forEach(t=>{
+    t.addEventListener('click',(e)=>{
+      // ignore close-x click
+      if(e.target.classList.contains('x')) return;
+      switchTab(t.dataset.target);
+    });
+  });
+
+  // close (x) just visually fades the tab
+  document.querySelectorAll('.tab .x').forEach(x=>{
+    x.addEventListener('click',(e)=>{
+      e.stopPropagation();
+      const tab = x.closest('.tab');
+      tab.style.opacity = .35;
+      tab.style.pointerEvents = 'none';
+    });
+  });
+
+  // scrollspy: highlight tab as user scrolls — DISABLED after first shell mount
+  // (caused mobile virtual-keyboard scroll bounce to misfire tab switches)
+  const tabIds = ['mint','wp','tok','road','feed'];
+  let spyEnabled = false;  // never enable on this build — we rely on click/cmd
+  const spy = new IntersectionObserver((entries)=>{
+    if(!spyEnabled) return;
+    if(document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('shell-input')) return;
+    entries.forEach(en=>{
+      if(en.isIntersecting){
+        const id = en.target.id;
+        if(tabIds.includes(id)){
+          document.querySelectorAll('.tab[data-target]').forEach(t=>{
+            const on = t.dataset.target === id;
+            t.classList.toggle('active', on);
+            t.firstChild.textContent = on ? '● ' : '○ ';
+          });
+        }
+      }
+    });
+  }, {rootMargin:'-30% 0px -60% 0px'});
+  tabIds.forEach(id=>{ const el=document.getElementById(id); if(el) spy.observe(el); });
+
+  // click anywhere on the screen refocuses the shell input (so user can keep typing)
+  document.querySelector('.screen').addEventListener('click',(e)=>{
+    if(activeInput && !e.target.closest('button,input,a,.tab,.x,.btn')) activeInput.focus();
+  });
+
+  // ascii bar
+  const bar = document.getElementById('supplyBar');
+  const draw = (pct) => {
+    const w = 44;
+    const fillN = Math.round(pct/100*w);
+    const empty = w - fillN;
+    bar.innerHTML = '['
+      + '<span class="fill">'+'█'.repeat(fillN)+'</span>'
+      + '<span class="empty">'+'░'.repeat(empty)+'</span>'
+      + '] ' + pct.toFixed(2) + '%';
+  };
+  draw(5.94);
+
+  // live feed
+  const log = document.getElementById('log');
+  const addrs = ['0x817A','0x29196c58','0xbd12','0xa7e3','0x2464','0x11D1','0x12C7Ab','0xEFAd2E'];
+  const events = [
+    () => `<span class="t">[${time()}]</span> <span class="ok">[mint]</span> ${rand(addrs)}…dEAd minted <span class="h">500</span> PRJCT0  nonce=<span class="h">0x${hex(8)}</span>  fee=<span class="h">$0.20</span>`,
+    () => `<span class="t">[${time()}]</span> <span class="ok">[hash]</span> gpu=<span class="h">RTX 4090</span> H/s=<span class="h">${rint(380,460)}M</span> share accepted`,
+    () => `<span class="t">[${time()}]</span> <span class="warn">[mempool]</span> tx 0x${hex(10)} pending  gas=${rint(8,42)} gwei`,
+    () => `<span class="t">[${time()}]</span> <span class="ok">[block]</span> #22481${rint(900,999)} included <span class="h">${rint(2,8)}</span> mints`,
+    () => `<span class="t">[${time()}]</span> <span class="err">[reject]</span> ${rand(addrs)}… cap reached <span class="h">10,000/10,000</span>`,
+    () => `<span class="t">[${time()}]</span> <span class="ok">[peer]</span> ${rint(80,140)} miners online  global H/s=<span class="h">${(Math.random()*8+2).toFixed(2)} GH/s</span>`,
+    () => `<span class="t">[${time()}]</span> <span class="warn">[fee]</span> $0.20 → 50% LP · 30% burn · 20% bounty`,
+  ];
+  function time(){const d=new Date();return d.toISOString().slice(11,19)}
+  function rand(a){return a[Math.floor(Math.random()*a.length)]}
+  function rint(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+  function hex(n){let s='';for(let i=0;i<n;i++)s+='0123456789abcdef'[rint(0,15)];return s}
+  function addRow(){
+    const div = document.createElement('div');
+    div.className='row';
+    div.innerHTML = rand(events)();
+    log.appendChild(div);
+    while(log.childNodes.length>10) log.removeChild(log.firstChild);
+  }
+  let feedTimer=null;
+  function startFeed(){
+    for(let i=0;i<6;i++) addRow();
+    feedTimer = setInterval(addRow, 1400);
+  }
+
+  // wallet stub — typewriter mint flow
+  const cb = document.getElementById('connectBtn');
+  const mb = document.getElementById('mintBtn');
+  const addr = document.getElementById('addr');
+  cb.addEventListener('click', async ()=>{
+    cb.disabled = true;
+    cb.textContent = '[ CONNECTING… ]';
+    await sleep(700);
+    cb.textContent = '[ ✓ CONNECTED ]';
+    addr.textContent = '0x29196c58…D77F';
+    mb.disabled = false;
+  });
+  mb.addEventListener('click', async ()=>{
+    if(mb.disabled) return;
+    mb.disabled = true;
+    const frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+    let i=0, h=0;
+    const t = setInterval(()=>{
+      i=(i+1)%frames.length;
+      h += rint(40,90);
+      mb.textContent = `[ ${frames[i]} MINING… ${h.toLocaleString()} H ]`;
+    }, 90);
+    // boot-style log injection
+    const lines = [
+      '[ <span style="color:var(--fg-bright)">..</span> ] requesting puzzle from contract',
+      '[ <span style="color:var(--accent)">ok</span> ] target = <span style="color:var(--cyan)">0x000007a1…</span>',
+      '[ <span style="color:var(--fg-bright)">..</span> ] starting GPU keccak256 search',
+      '[ <span style="color:var(--accent)">ok</span> ] nonce found in <span style="color:var(--cyan)">2.8s</span>',
+      '[ <span style="color:var(--fg-bright)">..</span> ] submitting tx to mempool',
+      '[ <span style="color:var(--accent)">ok</span> ] tx <span style="color:var(--cyan)">0x'+hex(12)+'</span> included',
+    ];
+    for(const ln of lines){
+      const row = document.createElement('div');
+      row.className='row';
+      row.innerHTML = `<span class="t">[${time()}]</span> ${ln}`;
+      log.appendChild(row);
+      while(log.childNodes.length>10) log.removeChild(log.firstChild);
+      await sleep(450);
+    }
+    clearInterval(t);
+    mb.textContent = '[ ✓ MINTED 1 PRJCT0 ]';
+  });
+
+  // keyboard nav 1-6 — only when NOT typing in an input/textarea
+  document.addEventListener('keydown',(e)=>{
+    if(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
+    if(e.ctrlKey || e.metaKey || e.altKey) return;
+    const map={'1':'mint','2':'wp','3':'tok','4':'road','5':'feed','6':'faq'};
+    if(map[e.key]){
+      const t=document.getElementById(map[e.key]);
+      if(t) t.scrollIntoView({behavior:'smooth',block:'start'});
+    }
+  });
+
+  // GO
+  runBoot();
+</script>
+</body>
+</html>
